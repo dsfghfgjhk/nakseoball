@@ -1,0 +1,1181 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>낙서볼</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gothic+A1:wght@400;600;800&display=swap">
+<style>
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;font-size:14px}
+[hidden]{display:none!important}
+:root{
+  /* Layout: one portrait game stage centered on a navy backdrop; HUD and sheets float over the 3D field */
+  --ink:#1b2347;
+  --red:#e5352b;
+  --yellow:#ffd23f;
+  --blue:#2c63d8;
+  --paper:#ffffff;
+  --mute:#6b7391;
+  --line:#e2e6f0;
+  --night:#121838;
+  --display:'Black Han Sans','Gothic A1',system-ui,sans-serif;
+  --body:'Gothic A1',system-ui,-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  color-scheme: light;
+}
+html,body{height:100%}
+body{background:var(--night);color:var(--ink);font-family:var(--body);overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+#app{position:relative;height:100%;max-width:100%;aspect-ratio:10/17;margin:0 auto;overflow:hidden;background:#cfe7f1;container-type:inline-size}
+#gl,#ov{position:absolute;inset:0;width:100%;height:100%;display:block}
+#ov{touch-action:none;cursor:crosshair}
+button{font-family:inherit;cursor:pointer;border:0}
+button:focus-visible,input:focus-visible{outline:3px solid var(--yellow);outline-offset:2px}
+
+/* HUD */
+#hud{position:absolute;top:0;left:0;right:0;padding:10px 12px 0;display:flex;align-items:flex-start;gap:8px;pointer-events:none}
+#hud>*{pointer-events:auto}
+#menuBtn{width:38px;height:38px;border-radius:10px;background:rgba(27,35,71,.85);color:#fff;font-size:20px;line-height:1;display:grid;place-items:center;flex:none}
+.hudCard{background:rgba(27,35,71,.85);color:#fff;border-radius:10px;padding:6px 10px;font-size:12px;line-height:1.35;font-weight:600;min-width:0}
+#who{flex:1;min-width:0}
+#who b{display:block;font-family:var(--display);font-weight:400;font-size:15px;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#who span{opacity:.75;font-weight:600;font-size:11px}
+#board{display:grid;grid-template-columns:auto auto;gap:2px 10px;align-items:center;flex:none}
+.cnt{display:flex;gap:3px;align-items:center;font-variant-numeric:tabular-nums}
+.cnt i{font-style:normal;width:12px;font-weight:800;font-size:11px;opacity:.85}
+.dot{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.22)}
+.dot.b.on{background:#5fd36a}.dot.s.on{background:var(--yellow)}.dot.o.on{background:var(--red)}
+#bases{grid-row:span 3;width:40px;height:40px}
+#scoreLine{font-family:var(--display);font-size:15px;grid-column:1/-1;text-align:right;font-variant-numeric:tabular-nums}
+
+/* banners */
+#bannerWrap{position:absolute;left:0;right:0;top:20%;display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;text-align:center;padding:0 16px}
+#banner{font-family:var(--display);font-size:clamp(34px,15cqw,64px);color:var(--yellow);-webkit-text-stroke:2px #2a160b;paint-order:stroke fill;text-shadow:0 4px 0 #2a160b;line-height:1.05;text-wrap:balance;opacity:0;transform:scale(.6)}
+#banner.show{animation:pop .35s cubic-bezier(.2,1.6,.4,1) forwards}
+#banner.blue{color:#69c8ff}
+#banner.red{color:#ff6b5e}
+#bannerSub{font-family:var(--display);font-size:clamp(14px,5cqw,20px);color:#fff;-webkit-text-stroke:1px #1b2347;paint-order:stroke fill;text-shadow:0 2px 0 #1b2347;opacity:0}
+#bannerSub.show{opacity:1;transition:opacity .2s .1s}
+@keyframes pop{to{opacity:1;transform:scale(1)}}
+#ticker{position:absolute;top:calc(20% - 26px);left:0;right:0;text-align:center;font-size:12px;font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6);pointer-events:none;opacity:0;transition:opacity .2s}
+#ticker.show{opacity:1}
+
+/* pitching controls */
+#pitchBar{position:absolute;left:0;right:0;bottom:0;padding:0 12px calc(14px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+#hint{background:rgba(27,35,71,.82);color:#fff;border-radius:12px;padding:8px 14px;text-align:center;font-size:13px;font-weight:600;line-height:1.45}
+#hint b{color:var(--yellow);font-weight:800}
+#balls{display:flex;gap:6px;pointer-events:auto}
+.chip{background:rgba(255,255,255,.92);color:var(--ink);border-radius:999px;padding:7px 12px;font-size:13px;font-weight:800;display:flex;align-items:center;gap:6px;box-shadow:0 2px 0 rgba(0,0,0,.18)}
+.chip .bd{width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #d33}
+.chip[aria-pressed="true"]{background:var(--ink);color:#fff}
+#batHint{position:absolute;left:0;right:0;bottom:calc(16px + env(safe-area-inset-bottom,0px));text-align:center;pointer-events:none}
+#batHint span{display:inline-block;background:rgba(27,35,71,.82);color:#fff;border-radius:12px;padding:8px 14px;font-size:13px;font-weight:600}
+#batHint b{color:var(--yellow)}
+
+/* title */
+#title{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between}
+#logo{padding:9% 16px 0;text-align:center;pointer-events:none}
+#logo h1{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(52px,24cqw,108px);line-height:.95;color:#fff;-webkit-text-stroke:3px var(--ink);paint-order:stroke fill;text-shadow:0 6px 0 var(--ink);letter-spacing:-.01em}
+#logo h1 em{font-style:normal;color:var(--red)}
+#logo p{margin:12px 0 0;font-weight:800;font-size:clamp(14px,4.4cqw,18px);color:var(--ink);background:var(--yellow);display:inline-block;padding:4px 12px;border-radius:6px;transform:rotate(-2deg)}
+.sheet{background:var(--paper);border-radius:22px 22px 0 0;padding:18px 16px calc(16px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px;max-height:72%;overflow:auto;box-shadow:0 -8px 30px rgba(18,24,56,.25)}
+.sheet h2{margin:0;font-size:12px;letter-spacing:.08em;color:var(--mute);font-weight:800}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.big{border-radius:14px;padding:12px 12px 11px;text-align:left;color:#fff;display:flex;flex-direction:column;gap:3px;box-shadow:0 4px 0 rgba(0,0,0,.22);transition:transform .08s}
+.big:active{transform:translateY(2px);box-shadow:0 2px 0 rgba(0,0,0,.22)}
+.big b{font-family:var(--display);font-weight:400;font-size:20px}
+.big span{font-size:12px;font-weight:600;opacity:.85}
+.big.red{background:var(--red)}.big.ink{background:var(--ink)}.big.blue{background:var(--blue)}
+#lvRow{display:flex;gap:6px}
+.lv{flex:1;border-radius:10px;padding:7px 0 6px;background:#eef1f8;color:var(--ink);font-weight:800;font-size:13px;display:flex;flex-direction:column;align-items:center;gap:1px}
+.lv small{font-size:10px;font-weight:600;color:var(--mute);letter-spacing:.02em;min-height:12px}
+.lv[aria-pressed="true"]{background:var(--ink);color:#fff}
+.lv[aria-pressed="true"] small{color:var(--yellow)}
+#lvInfo{font-size:12px;color:var(--mute);font-weight:600;line-height:1.5}
+#lvInfo b{color:var(--ink)}
+.codeRow{display:flex;gap:6px}
+.codeRow input{flex:1;min-width:0;border:2px solid var(--line);border-radius:10px;padding:9px 10px;font:600 13px var(--body);color:var(--ink);background:#fff;-webkit-user-select:text;user-select:text}
+.small{border-radius:10px;padding:0 14px;font-weight:800;font-size:13px;background:var(--ink);color:#fff}
+.how{font-size:12px;color:var(--mute);line-height:1.6;margin:0}
+
+/* cards */
+.scrim{position:absolute;inset:0;background:rgba(18,24,56,.45);display:grid;place-items:center;padding:16px}
+.card{background:var(--paper);border-radius:18px;padding:18px 16px 16px;width:100%;max-width:340px;text-align:center;display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 0 rgba(0,0,0,.15)}
+.card .eyebrow{font-size:12px;font-weight:800;color:var(--mute)}
+.card .score{font-family:var(--display);font-size:clamp(36px,13cqw,52px);line-height:1;color:var(--ink);display:flex;align-items:baseline;justify-content:center;gap:10px;font-variant-numeric:tabular-nums}
+.card .score small{font-size:.45em;color:var(--mute)}
+.card .score .me{color:var(--red)}
+.card h3{margin:0;font-family:var(--display);font-weight:400;font-size:26px}
+.card p{margin:0;font-size:13px;line-height:1.5;color:var(--mute);font-weight:600}
+.card p b{color:var(--ink)}
+.card textarea{width:100%;height:58px;resize:none;border:2px solid var(--line);border-radius:10px;padding:6px 8px;font:600 11px/1.35 ui-monospace,Menlo,monospace;color:var(--ink);background:#f6f7fb;-webkit-user-select:text;user-select:text;word-break:break-all}
+.btnRow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btn{border-radius:12px;padding:12px 8px;font-weight:800;font-size:14px;color:#fff;box-shadow:0 3px 0 rgba(0,0,0,.2)}
+.btn.red{background:var(--red)}.btn.blue{background:var(--blue)}.btn.ink{background:var(--ink)}
+.btn.ghost{background:#eef1f8;color:var(--ink);box-shadow:none}
+.toast{font-size:12px;font-weight:800;color:var(--blue);min-height:16px}
+
+#arrive{position:absolute;inset:0;background:var(--night);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px 16px;text-align:center}
+#arrive .k{font-family:var(--display);font-size:22px;line-height:1.2}
+#arrive .k em{font-style:normal;color:var(--red);display:block;font-size:28px}
+#arrive .msg{font-family:var(--display);font-size:clamp(24px,9cqw,34px);color:#69c8ff}
+#arrive .st{font-weight:800;font-size:15px}
+#arrive .btn{min-width:200px}
+#arrive .sm{font-size:12px;opacity:.7;font-weight:600}
+@media (prefers-reduced-motion:reduce){#banner.show{animation:none;opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="gl"></canvas>
+  <canvas id="ov" aria-label="게임 화면. 투구할 때는 공의 길을 그리고, 타격할 때는 공을 터치하세요"></canvas>
+
+  <div id="hud" hidden>
+    <button id="menuBtn" aria-label="처음 화면으로">≡</button>
+    <div id="who" class="hudCard"><b id="whoName">Lv1 · 동네 야구왕</b><span id="whoDesc">일단 휘두르고 본다</span></div>
+    <div id="board" class="hudCard">
+      <div class="cnt" id="cntB"><i>B</i><span class="dot b"></span><span class="dot b"></span><span class="dot b"></span></div>
+      <svg id="bases" viewBox="0 0 40 40" aria-hidden="true">
+        <rect id="b2" x="15" y="3" width="10" height="10" transform="rotate(45 20 8)" rx="1.5"/>
+        <rect id="b3" x="3" y="15" width="10" height="10" transform="rotate(45 8 20)" rx="1.5"/>
+        <rect id="b1" x="27" y="15" width="10" height="10" transform="rotate(45 32 20)" rx="1.5"/>
+      </svg>
+      <div class="cnt" id="cntS"><i>S</i><span class="dot s"></span><span class="dot s"></span></div>
+      <div class="cnt" id="cntO"><i>O</i><span class="dot o"></span><span class="dot o"></span></div>
+      <div id="scoreLine">0</div>
+    </div>
+  </div>
+
+  <div id="ticker"></div>
+  <div id="bannerWrap"><div id="banner"></div><div id="bannerSub"></div></div>
+
+  <div id="pitchBar" hidden>
+    <div id="hint">화면에 <b>공이 날아갈 길</b>을 그려!<br>선이 끝나는 곳으로 공이 들어가. 네모 안이면 스트라이크</div>
+    <div id="balls" role="group" aria-label="공 고르기">
+      <button class="chip" data-b="0" aria-pressed="true"><span class="bd"></span>야구공</button>
+      <button class="chip" data-b="1" aria-pressed="false"><span class="bd" style="width:16px;height:16px"></span>대왕공</button>
+      <button class="chip" data-b="2" aria-pressed="false"><span class="bd" style="width:8px;height:8px;border-width:1.5px"></span>콩알공</button>
+    </div>
+  </div>
+  <div id="batHint" hidden><span>날아오는 공을 <b>타이밍 맞춰 터치</b>해서 쳐!</span></div>
+
+  <div id="title">
+    <div id="logo"><h1>낙서<em>볼</em></h1><p>그린 대로 날아가는 야구</p></div>
+    <div class="sheet">
+      <h2>혼자 하기</h2>
+      <div class="row2">
+        <button class="big red" id="goPitch"><b>투구하기</b><span>마구를 그려서 타자 잡기</span></button>
+        <button class="big ink" id="goBat"><b>타격하기</b><span>날아오는 마구 받아치기</span></button>
+      </div>
+      <div id="lvRow" role="group" aria-label="레벨 고르기"></div>
+      <div id="lvInfo"></div>
+      <h2>친구랑 하기</h2>
+      <button class="big blue" id="goLink"><b>링크 대전</b><span>내가 던진 공을 링크로 보내고, 친구가 치고 다시 던져 보내는 방식 · 3회</span></button>
+      <div class="codeRow">
+        <input id="codeIn" placeholder="받은 링크나 코드 붙여넣기" autocomplete="off" spellcheck="false">
+        <button class="small" id="codeGo">열기</button>
+      </div>
+      <p class="how">투구: 손가락으로 선을 그리면 공이 그 길 그대로 날아가요. 빙글빙글 돌수록 치기 어렵지만, 마지막엔 네모(스트라이크 존) 안으로 들어와야 해요.<br>타격: 공이 홈플레이트 근처에 왔을 때 공 위치를 터치하면 스윙해요. 공 아래쪽을 치면 뜨고, 위쪽을 치면 땅볼이 돼요.</p>
+    </div>
+  </div>
+
+  <div id="modal" class="scrim" hidden>
+    <div class="card">
+      <div class="eyebrow" id="mEye"></div>
+      <h3 id="mTitle"></h3>
+      <p id="mText"></p>
+      <div class="btnRow" id="mBtns"></div>
+    </div>
+  </div>
+
+  <div id="share" class="scrim" hidden>
+    <div class="card">
+      <div class="eyebrow" id="sEye">1회초 · 다 던졌다!</div>
+      <div class="score"><small>나</small><span class="me" id="sMe">0</span>-<span id="sOp">0</span><small>상대</small></div>
+      <p id="sMsg"><b>이 링크를 상대에게 보내자</b><br>상대가 치고 다시 던져 올 때까지 기다리면 돼</p>
+      <textarea id="sLink" readonly aria-label="대전 링크"></textarea>
+      <div class="btnRow">
+        <button class="btn red" id="sCopyLink">링크 복사</button>
+        <button class="btn blue" id="sCopyCode">코드만 복사</button>
+      </div>
+      <div class="toast" id="sToast" aria-live="polite"></div>
+      <p style="font-size:11px">링크가 안 열리면 코드를 보내서, 친구가 첫 화면 ‘받은 링크나 코드 붙여넣기’ 칸에 넣으면 돼</p>
+      <button class="btn ghost" id="sHome">처음으로</button>
+    </div>
+  </div>
+
+  <div id="arrive" hidden>
+    <div class="k">낙서볼<em>링크 대전</em></div>
+    <div class="msg" id="aMsg">대전이 도착했어!</div>
+    <div class="st" id="aSt">1회초 · 나 0 - 0 상대</div>
+    <button class="btn red" id="aGo">타석에 서기</button>
+    <div class="sm" id="aSm">친구가 던진 마구를 받아쳐 보자</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+const ARTIFACT_URL = '';
+const ROUNDS = 3;
+const Z0 = 17;                       // depth where every pitch path starts (m from plate)
+const ZONE = {x:0.26, y0:0.45, y1:1.1};
+const BATTER_X = 0.8;
+
+const $ = s => document.querySelector(s);
+const rnd = (a,b) => a + Math.random()*(b-a);
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const lerp = (a,b,t) => a + (b-a)*t;
+const ease = t => t<.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+
+const BALLS = [
+  {name:'야구공', r:0.055, ring:1.0, dist:1.0, cpu:1.0},
+  {name:'대왕공', r:0.17,  ring:1.35, dist:0.85, cpu:1.35},
+  {name:'콩알공', r:0.03,  ring:0.75, dist:1.1, cpu:0.7},
+];
+const LV = [
+  {bat:{name:'동네 야구왕', desc:'일단 휘두르고 본다', helmet:0xf2c230, scale:0.95, batLen:1.0},
+   ai:{contact:0.42, eye:0.75, chase:0.45, tol:500, power:0.8},
+   pit:{name:'동네 형', desc:'느릿느릿 휘는 공', cap:0xf2c230}, gen:{T:1.35, moves:['curve']}, target:1},
+  {bat:{name:'야구부 주장', desc:'공을 끝까지 본다', helmet:0x2e9e5b, scale:1.0, batLen:1.0},
+   ai:{contact:0.5, eye:0.78, chase:0.32, tol:900, power:0.9},
+   pit:{name:'고교 에이스', desc:'흔들리며 들어오는 공', cap:0x2e9e5b}, gen:{T:1.15, moves:['curve','wave']}, target:1},
+  {bat:{name:'2군 거포', desc:'덩치가 산만하다', helmet:0xf07a2a, scale:1.12, batLen:1.05},
+   ai:{contact:0.56, eye:0.8, chase:0.26, tol:1600, power:1.0},
+   pit:{name:'2군 마구사', desc:'뚝 떨어지는 공', cap:0xf07a2a}, gen:{T:1.0, moves:['drop','spiral1','curve']}, target:2},
+  {bat:{name:'외국인 용병', desc:'배트가 엄청 길다', helmet:0xd8322b, scale:1.15, batLen:1.45},
+   ai:{contact:0.62, eye:0.82, chase:0.2, tol:2800, power:1.1},
+   pit:{name:'용병 투수', desc:'빙글빙글 도는 공', cap:0xd8322b}, gen:{T:0.9, moves:['spiral2','drop','wave']}, target:2},
+  {bat:{name:'괴물 신인', desc:'무슨 공이든 다 보인다', helmet:0x7b4bd8, scale:1.3, batLen:1.2},
+   ai:{contact:0.7, eye:0.86, chase:0.14, tol:5000, power:1.2},
+   pit:{name:'괴물 에이스', desc:'물리법칙이 없다', cap:0x7b4bd8}, gen:{T:0.8, moves:['spiral3','drop','wave','zig']}, target:3},
+];
+const MY_BATTER = {helmet:0x1f2a5a, scale:1, batLen:1, uni:0xf3f3f1, pants:0xdfe1e6};
+const OPP_BATTER = {helmet:0xd8322b, scale:1, batLen:1, uni:0xf3f3f1, pants:0xdfe1e6};
+
+/* ---------------- storage ---------------- */
+function loadClears(){ try{ return JSON.parse(localStorage.getItem('nakseoball-clears')) || {pitch:[],bat:[]}; }catch(e){ return {pitch:[],bat:[]}; } }
+function saveClear(mode,l){ const c=loadClears(); if(!c[mode].includes(l)) c[mode].push(l); try{ localStorage.setItem('nakseoball-clears', JSON.stringify(c)); }catch(e){} }
+
+/* ---------------- audio ---------------- */
+let AC = null;
+function audioInit(){ if(AC) return; try{ AC = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ AC=null; } }
+function noise(dur, freq, q, gain, type){
+  if(!AC) return; try{
+  const n = Math.floor(AC.sampleRate*dur), b = AC.createBuffer(1,n,AC.sampleRate), d = b.getChannelData(0);
+  for(let i=0;i<n;i++) d[i] = (Math.random()*2-1)*Math.pow(1-i/n,2);
+  const s = AC.createBufferSource(); s.buffer=b;
+  const f = AC.createBiquadFilter(); f.type=type||'bandpass'; f.frequency.value=freq; f.Q.value=q;
+  const g = AC.createGain(); g.gain.value=gain;
+  s.connect(f); f.connect(g); g.connect(AC.destination); s.start(); }catch(e){}
+}
+function tone(freq, dur, gain, type){
+  if(!AC) return; try{
+  const o = AC.createOscillator(), g = AC.createGain(); o.type=type||'sine'; o.frequency.value=freq;
+  g.gain.setValueAtTime(gain, AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime+dur);
+  o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime+dur); }catch(e){}
+}
+const sfx = {
+  crack(){ noise(0.14, 2200, 0.7, 1.0, 'highpass'); tone(1200, 0.06, 0.25, 'square'); },
+  pop(){ noise(0.09, 500, 1.2, 0.9); tone(130, 0.12, 0.5); },
+  whoosh(){ noise(0.25, 800, 0.5, 0.5); },
+  thud(){ tone(85, 0.18, 0.7); noise(0.06, 300, 1, 0.5); },
+  cheer(){ noise(1.2, 1500, 0.3, 0.25); },
+};
+
+/* ---------------- three setup ---------------- */
+const app = $('#app'), gl = $('#gl'), ov = $('#ov'), octx = ov.getContext('2d');
+let VW = 1, VH = 1, DPR = 1;
+const renderer = new THREE.WebGLRenderer({canvas:gl, antialias:true});
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+const SKY = 0xcfe7f1;
+scene.background = new THREE.Color(SKY);
+scene.fog = new THREE.Fog(SKY, 80, 260);
+const camera = new THREE.PerspectiveCamera(20, 0.6, 0.05, 600);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x7d9a62, 0.8));
+const sun = new THREE.DirectionalLight(0xffffff, 0.62);
+sun.position.set(-8, 26, 4); sun.target.position.set(0,0,9);
+sun.castShadow = true; sun.shadow.mapSize.set(1024,1024);
+Object.assign(sun.shadow.camera, {left:-14,right:14,top:16,bottom:-16,near:1,far:70});
+sun.shadow.bias = -0.0008;
+scene.add(sun, sun.target);
+
+const matCache = {};
+const M = c => matCache[c] || (matCache[c] = new THREE.MeshLambertMaterial({color:c}));
+
+function stripeTex(){
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d');
+  for(let i=0;i<8;i++){ x.fillStyle = i%2 ? '#7cc461' : '#6cb655'; x.fillRect(0,i*32,256,32); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(12,12);
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy ? Math.min(8, renderer.capabilities.getMaxAnisotropy()) : 1;
+  return t;
+}
+function ballTex(){
+  const c = document.createElement('canvas'); c.width=256; c.height=128;
+  const x = c.getContext('2d'); x.fillStyle='#fbfaf6'; x.fillRect(0,0,256,128);
+  x.strokeStyle='#d22b2b'; x.lineWidth=3;
+  for(const off of [0,128]){
+    x.beginPath();
+    for(let i=0;i<=128;i++){ const px=off+i, py=64+30*Math.sin(i/128*Math.PI*2); i?x.lineTo(px,py):x.moveTo(px,py); }
+    x.stroke();
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+function strip(x0,z0,x1,z1,w,mat,y){
+  const dx=x1-x0, dz=z1-z0, len=Math.hypot(dx,dz);
+  const g = new THREE.PlaneGeometry(w, len); g.rotateX(-Math.PI/2);
+  const m = new THREE.Mesh(g, mat); m.position.set((x0+x1)/2, y||0.02, (z0+z1)/2); m.rotation.y = Math.atan2(dx,dz);
+  m.receiveShadow = true; scene.add(m); return m;
+}
+function fenceR(deg){ return 95 + 20*Math.cos(2*deg*Math.PI/180); }
+
+function buildField(){
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(600,600), new THREE.MeshLambertMaterial({map:stripeTex()}));
+  ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+  const dirt = M(0xcf9a66), white = M(0xffffff);
+  const flat = (geo,mat,x,z,y) => { const m=new THREE.Mesh(geo,mat); m.rotation.x=-Math.PI/2; m.position.set(x,y,z); m.receiveShadow=true; scene.add(m); return m; };
+  flat(new THREE.CircleGeometry(4.6,48), dirt, 0, 0, 0.012);
+  flat(new THREE.RingGeometry(15.5, 28.5, 72, 1, 170*Math.PI/180, 200*Math.PI/180), dirt, 0, 18.44, 0.01);
+  strip(0,0,-19.4,19.4,1.1,dirt,0.011); strip(0,0,19.4,19.4,1.1,dirt,0.011);
+  const mound = new THREE.Mesh(new THREE.CylinderGeometry(2.7,2.9,0.25,40), dirt);
+  mound.position.set(0,0.125,18.44); mound.receiveShadow = true; scene.add(mound);
+  const rubber = new THREE.Mesh(new THREE.BoxGeometry(0.6,0.03,0.15), white); rubber.position.set(0,0.26,18.44); scene.add(rubber);
+  for(const [x,z] of [[-19.4,19.4],[0,38.8],[19.4,19.4]]){ const b=new THREE.Mesh(new THREE.BoxGeometry(0.38,0.08,0.38), white); b.position.set(x,0.04,z); b.rotation.y=Math.PI/4; b.castShadow=true; scene.add(b); }
+  const sh = new THREE.Shape(); sh.moveTo(-0.216,0); sh.lineTo(0.216,0); sh.lineTo(0.216,0.216); sh.lineTo(0,0.43); sh.lineTo(-0.216,0.216); sh.lineTo(-0.216,0);
+  flat(new THREE.ShapeGeometry(sh), white, 0, 0.215, 0.02);
+  for(const sx of [-1,1]){
+    const cx = sx*0.95, hw=0.6, hz=0.9, t=0.05;
+    strip(cx-hw,-hz,cx-hw,hz,t,white,0.021); strip(cx+hw,-hz,cx+hw,hz,t,white,0.021);
+    strip(cx-hw,-hz,cx+hw,-hz,t,white,0.021); strip(cx-hw,hz,cx+hw,hz,t,white,0.021);
+  }
+  const s45 = Math.SQRT1_2;
+  strip(0,0,-110*s45,110*s45,0.1,white,0.02); strip(0,0,110*s45,110*s45,0.1,white,0.02);
+  const fenceMat = M(0x2d5c43), capMat = M(0xf2c230), standA = M(0x4a5a80), standB = M(0x6d7fa6);
+  for(let a=-48; a<48; a+=3){
+    const m = a+1.5, th = m*Math.PI/180, r = fenceR(clamp(m,-45,45));
+    const w = 2*r*Math.sin(1.6*Math.PI/180)+0.3;
+    const f = new THREE.Mesh(new THREE.BoxGeometry(w,3,0.4), fenceMat); f.position.set(Math.sin(th)*r,1.5,Math.cos(th)*r); f.rotation.y=th; scene.add(f);
+    const cp = new THREE.Mesh(new THREE.BoxGeometry(w,0.2,0.45), capMat); cp.position.set(Math.sin(th)*r,3.05,Math.cos(th)*r); cp.rotation.y=th; scene.add(cp);
+    for(let k=0;k<3;k++){
+      const rr = r+5+k*5, sw = 2*rr*Math.sin(1.6*Math.PI/180)+0.4;
+      const s = new THREE.Mesh(new THREE.BoxGeometry(sw, 5+k*4, 5), k%2?standB:standA);
+      s.position.set(Math.sin(th)*rr, (5+k*4)/2, Math.cos(th)*rr); s.rotation.y=th; scene.add(s);
+    }
+  }
+  const pts = [[-ZONE.x,ZONE.y0],[ZONE.x,ZONE.y0],[ZONE.x,ZONE.y1],[-ZONE.x,ZONE.y1]].map(p=>new THREE.Vector3(p[0],p[1],0));
+  zoneLine = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.75}));
+  scene.add(zoneLine);
+}
+let zoneLine;
+
+/* ---------------- characters ---------------- */
+const UP = new THREE.Vector3(0,1,0);
+function makePlayer(o){
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  const uni = M(o.uni), pants = M(o.pants!=null?o.pants:o.uni), skin = M(0xf0c7a0), cap = M(o.cap);
+  const add = (geo, mat, x, y, z, parent) => { const m=new THREE.Mesh(geo,mat); m.position.set(x,y,z); m.castShadow=true; (parent||body).add(m); return m; };
+  let headY;
+  if(o.crouch){
+    for(const sx of [-1,1]){
+      add(new THREE.CapsuleGeometry(0.12,0.3,4,10), pants, sx*0.17, 0.42, 0.12).rotation.x = 1.25;
+      add(new THREE.CapsuleGeometry(0.11,0.26,4,10), pants, sx*0.19, 0.22, 0.3);
+    }
+    add(new THREE.CapsuleGeometry(0.28,0.28,6,14), uni, 0, 0.8, 0).rotation.x = 0.25;
+    headY = 1.3;
+  } else {
+    for(const sx of [-1,1]) add(new THREE.CapsuleGeometry(0.11,0.42,4,10), pants, sx*0.12, 0.34, 0);
+    add(new THREE.CapsuleGeometry(0.27,0.36,6,14), uni, 0, 1.02, 0);
+    headY = 1.57;
+  }
+  add(new THREE.SphereGeometry(0.2,18,14), skin, 0, headY, 0);
+  const capR = o.helmet ? 0.225 : 0.205;
+  add(new THREE.SphereGeometry(capR,18,10,0,Math.PI*2,0,Math.PI/2), cap, 0, headY+0.02, 0);
+  const brim = add(new THREE.CylinderGeometry(0.14,0.14,0.025,18), cap, 0, headY+0.03, 0.19); brim.scale.set(1,1,0.8);
+  if(o.mask){ const mk = add(new THREE.BoxGeometry(0.3,0.26,0.05), M(0x333333), 0, headY-0.02, 0.2); mk.material = M(0x2b2b2b); }
+  const shoulderY = headY - 0.36;
+  const arm = sx => {
+    const a = new THREE.Group(); a.position.set(sx*0.32, shoulderY, 0); body.add(a);
+    add(new THREE.CapsuleGeometry(0.075,0.3,4,8), uni, 0, -0.2, 0, a);
+    add(new THREE.SphereGeometry(0.075,10,8), skin, 0, -0.4, 0, a);
+    return a;
+  };
+  const armL = arm(1), armR = arm(-1);
+  if(o.glove){ add(new THREE.SphereGeometry(0.12,12,10), M(0x8a4b22), 0, -0.44, 0.04, armL).scale.set(1,1.1,0.6); }
+  let batPivot = null;
+  if(o.bat){
+    batPivot = new THREE.Group(); batPivot.position.set(-0.05, shoulderY-0.14, 0.2); body.add(batPivot);
+    const L = 0.86*(o.batLen||1);
+    const bg = new THREE.CylinderGeometry(0.038, 0.017, L, 12); bg.translate(0, L/2, 0);
+    const bat = new THREE.Mesh(bg, M(0xd5a05a)); bat.castShadow = true; batPivot.add(bat);
+    armL.rotation.x = armR.rotation.x = -1.1; armL.rotation.z = -0.25; armR.rotation.z = 0.25;
+  }
+  g.scale.setScalar(o.scale||1);
+  g.userData = {body, armL, armR, batPivot, swing:-1, hurt:0, throwT:-1};
+  g.traverse(m=>{ if(m.isMesh) m.castShadow = true; });
+  return g;
+}
+const BAT_KF = [[0,[-0.45,0.85,-0.25]],[0.18,[-0.85,0.45,-0.15]],[0.5,[0.05,0.06,1]],[0.75,[0.8,0.3,-0.2]],[1,[0.15,0.55,-0.85]]];
+const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3();
+function batDir(p, out){
+  p = clamp(p,0,1);
+  for(let i=0;i<BAT_KF.length-1;i++){
+    const [t0,a]=BAT_KF[i], [t1,b]=BAT_KF[i+1];
+    if(p<=t1){ const k=(p-t0)/(t1-t0); return out.set(lerp(a[0],b[0],k),lerp(a[1],b[1],k),lerp(a[2],b[2],k)).normalize(); }
+  }
+  const l = BAT_KF[BAT_KF.length-1][1]; return out.set(l[0],l[1],l[2]).normalize();
+}
+
+let batter, pitcher, catcher, mitt, ball, trail;
+function setBatter(look){
+  if(batter) scene.remove(batter);
+  batter = makePlayer({uni:look.uni||0xf3f3f1, pants:look.pants||0xdfe1e6, cap:look.helmet, helmet:true, bat:true, batLen:look.batLen, scale:look.scale});
+  batter.position.set(BATTER_X, 0, 0.05); batter.rotation.y = -Math.PI/2;
+  batter.userData.look = look;
+  scene.add(batter); poseBatter(0);
+}
+function setPitcher(capColor){
+  if(pitcher) scene.remove(pitcher);
+  pitcher = makePlayer({uni:0x1f2a5a, pants:0x1f2a5a, cap:capColor, glove:true});
+  pitcher.position.set(0, 0.25, 18.44); pitcher.rotation.y = Math.PI;
+  scene.add(pitcher);
+}
+function poseBatter(p){
+  const u = batter.userData;
+  batDir(p, tmpV);
+  u.batPivot.quaternion.setFromUnitVectors(UP, tmpV);
+  u.body.rotation.y = p<=0 ? 0.2 : (p<0.5 ? 0.2 - p*0.7 : -0.15 - (p-0.5)*1.1);
+}
+
+function buildActors(){
+  setBatter(LV[0].bat);
+  setPitcher(LV[0].pit.cap);
+  catcher = makePlayer({uni:0x1f2a5a, pants:0x1f2a5a, cap:0x1f2a5a, crouch:true, mask:true});
+  catcher.position.set(0, 0, -1.05); scene.add(catcher);
+  mitt = new THREE.Mesh(new THREE.SphereGeometry(0.17,16,12), M(0x7a3f1c)); mitt.scale.set(1,1.1,0.55); mitt.castShadow = true; scene.add(mitt);
+  resetMitt();
+  ball = new THREE.Mesh(new THREE.SphereGeometry(1,22,16), new THREE.MeshLambertMaterial({map:ballTex()}));
+  ball.castShadow = true; ball.visible = false; scene.add(ball);
+  trail = new THREE.InstancedMesh(new THREE.SphereGeometry(1,8,6), new THREE.MeshBasicMaterial({color:0xff6a2b}), 220);
+  trail.count = 0; trail.frustumCulled = false; scene.add(trail);
+}
+function resetMitt(){ mitt.position.set(0, 0.75, -0.72); mitt.userData.target = mitt.position.clone(); }
+const dummy = new THREE.Object3D();
+function addDot(p, r){ if(trail.count >= 220) return; dummy.position.copy(p); dummy.scale.setScalar(r); dummy.updateMatrix(); trail.setMatrixAt(trail.count++, dummy.matrix); trail.instanceMatrix.needsUpdate = true; }
+
+/* ---------------- views ---------------- */
+const VIEWS = {
+  pitch:{pos:[0,1.95,19.6], look:[0,0.8,0], v:16.5, h:10.5},
+  bat:  {pos:[0.05,1.55,-4.4], look:[0,1.0,18.4], v:26, h:17},
+  hit:  {pos:[0,9,-15], look:[0,2,10], v:44, h:40},
+  title:{pos:[10,6,-12], look:[0,1,8], v:36, h:30},
+};
+let view = 'title', camLook = new THREE.Vector3(), titleAng = 0;
+function fovFor(vw){ const a = camera.aspect; return Math.max(vw.v, 2*Math.atan(Math.tan(vw.h*Math.PI/360)/a)*180/Math.PI); }
+function setView(name){
+  view = name; const vw = VIEWS[name];
+  camera.fov = fovFor(vw); camera.updateProjectionMatrix();
+  camera.position.set(...vw.pos); camLook.set(...vw.look); camera.lookAt(camLook); camera.updateMatrixWorld();
+  const pv = name==='pitch';
+  pitcher.visible = !pv; catcher.visible = name!=='bat'; mitt.visible = name!=='bat';
+  zoneLine.visible = false;
+}
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  VW = app.clientWidth; VH = app.clientHeight;
+  renderer.setPixelRatio(DPR); renderer.setSize(VW, VH, false);
+  ov.width = Math.round(VW*DPR); ov.height = Math.round(VH*DPR);
+  camera.aspect = VW/VH;
+  camera.fov = fovFor(VIEWS[view]); camera.updateProjectionMatrix();
+}
+
+/* ---------------- path math ---------------- */
+function polyLen(p){ let l=0; for(let i=1;i<p.length;i++) l += Math.hypot(p[i].x-p[i-1].x, p[i].y-p[i-1].y); return l; }
+function resample(p, n){
+  const L = polyLen(p), out = [];
+  if(L===0){ for(let i=0;i<n;i++) out.push({x:p[0].x,y:p[0].y}); return out; }
+  let seg=1, acc=0;
+  for(let i=0;i<n;i++){
+    const target = L*i/(n-1);
+    while(seg < p.length-1 && acc + Math.hypot(p[seg].x-p[seg-1].x, p[seg].y-p[seg-1].y) < target){ acc += Math.hypot(p[seg].x-p[seg-1].x, p[seg].y-p[seg-1].y); seg++; }
+    const sl = Math.hypot(p[seg].x-p[seg-1].x, p[seg].y-p[seg-1].y) || 1;
+    const k = clamp((target-acc)/sl, 0, 1);
+    out.push({x:lerp(p[seg-1].x,p[seg].x,k), y:lerp(p[seg-1].y,p[seg].y,k)});
+  }
+  return out;
+}
+function turnDeg(p, step){
+  const L = polyLen(p); if(L < step*2) return 0;
+  const r = resample(p, Math.max(3, Math.ceil(L/step)));
+  let sum = 0, prev = null;
+  for(let i=1;i<r.length;i++){
+    const a = Math.atan2(r[i].y-r[i-1].y, r[i].x-r[i-1].x);
+    if(prev!==null){ let d=a-prev; while(d>Math.PI) d-=2*Math.PI; while(d<-Math.PI) d+=2*Math.PI; sum += Math.abs(d); }
+    prev = a;
+  }
+  return sum*180/Math.PI;
+}
+function pathXY(p, u){
+  const n = p.n, f = clamp(u,0,1)*(n-1), i = Math.min(n-2, Math.floor(f)), t = f-i;
+  const g = k => { k = clamp(k,0,n-1); return k; };
+  const i0=g(i-1), i1=i, i2=i+1, i3=g(i+2), xy=p.xy;
+  const cr = (a,b,c,d) => 0.5*((2*b) + (-a+c)*t + (2*a-5*b+4*c-d)*t*t + (-a+3*b-3*c+d)*t*t*t);
+  return [cr(xy[2*i0],xy[2*i1],xy[2*i2],xy[2*i3]), cr(xy[2*i0+1],xy[2*i1+1],xy[2*i2+1],xy[2*i3+1])];
+}
+function pathAt(p, u, br, out){ const [x,y] = pathXY(p,u); return out.set(x, Math.max(y, br||0.03), Z0*(1-clamp(u,0,1))); }
+function isStrike(p){ const [x,y] = pathXY(p,1); return Math.abs(x)<=ZONE.x && y>=ZONE.y0 && y<=ZONE.y1; }
+const kmh = T => Math.round(18.44/T*3.6);
+
+function genPitch(l){
+  const g = LV[l].gen, n = 150, xy = new Float32Array(n*2);
+  const strike = Math.random() < 0.62;
+  let tx, ty;
+  if(strike){ tx = rnd(-0.2,0.2); ty = rnd(0.55,1.0); }
+  else if(Math.random()<0.5){ tx = rnd(-0.75,-0.34); ty = rnd(0.4,1.2); }
+  else { tx = rnd(-0.25,0.25); ty = Math.random()<0.5 ? rnd(0.12,0.38) : rnd(1.18,1.5); }
+  const sx = 0.25, sy = 1.9, s1 = Math.random()<0.5?1:-1;
+  const pick = g.moves[Math.floor(Math.random()*g.moves.length)];
+  let mod = () => [0,0];
+  if(pick==='curve'){ const a=rnd(0.25,0.6)*s1, b=rnd(-0.2,0.35); mod = u => [a*Math.sin(Math.PI*u), b*Math.sin(Math.PI*u)]; }
+  else if(pick==='wave'){ const k=rnd(1.5,3), a=rnd(0.25,0.5); mod = u => [a*Math.sin(2*Math.PI*k*u)*Math.sin(Math.PI*u), 0.12*Math.sin(Math.PI*u)]; }
+  else if(pick==='drop'){ const H=rnd(0.8,1.6), a=rnd(-0.2,0.2); mod = u => [a*Math.sin(Math.PI*u), H*(u<0.8 ? Math.sin(Math.PI/2*u/0.8) : Math.cos(Math.PI/2*(u-0.8)/0.2))]; }
+  else if(pick.startsWith('spiral')){ const lv=+pick.slice(-1), k=rnd(1,2)*lv, r=rnd(0.3,0.5)*(0.7+lv*0.3), ph=Math.random()*6.28;
+    mod = u => { const e=Math.sin(Math.PI*u), a=2*Math.PI*k*u*s1+ph; return [r*e*(Math.cos(a)-Math.cos(ph)), r*e*(Math.sin(a)-Math.sin(ph))]; }; }
+  else if(pick==='zig'){ const k=rnd(3,5), a=rnd(0.3,0.6); mod = u => { const tri=2*Math.abs(2*((u*k)%1)-1)-1, e=Math.sin(Math.PI*u); return [a*tri*e, 0.25*Math.sin(Math.PI*u*k)*e]; }; }
+  for(let i=0;i<n;i++){
+    const u = i/(n-1), [dx,dy] = mod(u);
+    xy[2*i] = sx + (tx-sx)*u + dx;
+    xy[2*i+1] = Math.max(0.03, sy + (ty-sy)*u + dy);
+  }
+  const pts = []; for(let i=0;i<n;i++) pts.push({x:xy[2*i]*100, y:xy[2*i+1]*100});
+  return {n, xy, T:g.T*rnd(0.92,1.08), turn:turnDeg(pts,3), ball:0};
+}
+
+/* ---------------- link encoding ---------------- */
+function b64u(bytes){ let s=''; for(const b of bytes) s += String.fromCharCode(b); return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+function unb64u(str){ str = str.replace(/-/g,'+').replace(/_/g,'/'); while(str.length%4) str+='='; const s = atob(str), b = new Uint8Array(s.length); for(let i=0;i<s.length;i++) b[i]=s.charCodeAt(i); return b; }
+function quantize(p){ const xy = new Float32Array(p.n*2); for(let i=0;i<p.n*2;i++) xy[i] = Math.round(clamp(p.xy[i]*100,-32000,32000))/100; return Object.assign({}, p, {xy, T:Math.round(p.T*1000)/1000}); }
+function encodeLink(st, p){
+  const n = p ? p.n : 0, buf = new Uint8Array(12 + n*4), dv = new DataView(buf.buffer);
+  dv.setUint8(0,1); dv.setUint8(1,st.r); dv.setUint8(2,Math.min(255,st.s[0])); dv.setUint8(3,Math.min(255,st.s[1]));
+  dv.setUint8(4,(st.from==='A'?0:1) | (st.done?2:0)); dv.setUint8(5, p?p.ball:0);
+  dv.setUint16(6, p?Math.round(p.T*1000):0); dv.setUint16(8, p?Math.min(65535,Math.round(p.turn)):0); dv.setUint16(10, n);
+  for(let i=0;i<n;i++){ dv.setInt16(12+i*4, Math.round(clamp(p.xy[2*i]*100,-32000,32000))); dv.setInt16(14+i*4, Math.round(clamp(p.xy[2*i+1]*100,-32000,32000))); }
+  return b64u(buf);
+}
+function decodeLink(code){
+  const b = unb64u(code), dv = new DataView(b.buffer);
+  if(b.length < 12 || dv.getUint8(0)!==1) throw new Error('bad');
+  const f = dv.getUint8(4), n = dv.getUint16(10);
+  const st = {r:dv.getUint8(1), s:[dv.getUint8(2), dv.getUint8(3)], from:(f&1)?'B':'A', done:!!(f&2)};
+  let p = null;
+  if(n>=2){
+    if(b.length < 12+n*4) throw new Error('short');
+    const xy = new Float32Array(n*2);
+    for(let i=0;i<n;i++){ xy[2*i] = dv.getInt16(12+i*4)/100; xy[2*i+1] = dv.getInt16(14+i*4)/100; }
+    p = {n, xy, T:clamp(dv.getUint16(6)/1000, 0.3, 3), turn:dv.getUint16(8), ball:clamp(dv.getUint8(5),0,2)};
+  }
+  return {st, p};
+}
+function linkFor(code){ const base = ARTIFACT_URL || location.href.split('#')[0]; return base + '#nb.' + code; }
+function extractCode(text){ const m = String(text).match(/nb\.([A-Za-z0-9_-]{8,})/); if(m) return m[1]; const t = String(text).trim(); return /^[A-Za-z0-9_-]{8,}$/.test(t) ? t : null; }
+
+/* ---------------- game state ---------------- */
+const G = {mode:null, level:0, state:'title', b:0, s:0, o:0, runs:0, bases:[0,0,0], ballType:0, pitchNo:0, batting:false};
+let F = null;      // current pitch flight
+let H = null;      // current hit flight
+let L = null;      // link battle state
+let stroke = [], strokeAlpha = 0, drawing = false, strokeT0 = 0;
+let ring = null, ringFlash = 0;
+let timers = [];
+const later = (ms, fn) => { const id = setTimeout(()=>{ timers = timers.filter(t=>t!==id); fn(); }, ms); timers.push(id); return id; };
+const clearLater = () => { timers.forEach(clearTimeout); timers = []; };
+
+/* ---------------- UI helpers ---------------- */
+const banner = $('#banner'), bannerSub = $('#bannerSub'), ticker = $('#ticker');
+let bannerTimer = 0, tickerTimer = 0;
+function showBanner(text, sub, ms, tone){
+  banner.className = ''; void banner.offsetWidth;
+  banner.textContent = text; banner.className = 'show' + (tone?' '+tone:'');
+  bannerSub.textContent = sub || ''; bannerSub.className = sub ? 'show' : '';
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(()=>{ banner.className=''; bannerSub.className=''; }, ms||1400);
+}
+function hideBanner(){ clearTimeout(bannerTimer); banner.className=''; bannerSub.className=''; }
+function showTicker(text, ms){ ticker.textContent = text; ticker.className='show'; clearTimeout(tickerTimer); tickerTimer = setTimeout(()=>ticker.className='', ms||1800); }
+function show(el, on){ (typeof el==='string'?$(el):el).hidden = !on; }
+
+function updateHUD(){
+  show('#hud', true);
+  const solo = G.mode==='pitch' || G.mode==='bat';
+  ['#cntB','#cntS','#cntO','#bases'].forEach(s=>show(s, solo));
+  if(solo){
+    const lv = LV[G.level], who = G.mode==='pitch' ? lv.bat : lv.pit;
+    $('#whoName').textContent = `Lv${G.level+1} · ${who.name}`;
+    $('#whoDesc').textContent = G.mode==='pitch' ? `상대 타자 · ${who.desc}` : `상대 투수 · ${who.desc}`;
+    const dots = (sel,n) => document.querySelectorAll(sel+' .dot').forEach((d,i)=>d.classList.toggle('on', i<n));
+    dots('#cntB',G.b); dots('#cntS',G.s); dots('#cntO',G.o);
+    ['b1','b2','b3'].forEach((id,i)=>{ $('#'+id).setAttribute('fill', G.bases[i] ? '#ffd23f' : 'rgba(255,255,255,.25)'); });
+    $('#scoreLine').textContent = G.mode==='pitch' ? `실점 ${G.runs} / 3` : `득점 ${G.runs} / ${lv.target}`;
+  } else if(L){
+    const me = L.role==='A'?0:1;
+    $('#whoName').textContent = `${roundLabel()} · 링크 대전`;
+    $('#whoDesc').textContent = G.mode==='link-bat' ? '친구가 던진 마구를 쳐라' : '친구에게 보낼 마구를 그려라';
+    $('#scoreLine').textContent = `나 ${L.s[me]} - ${L.s[1-me]} 상대`;
+  }
+}
+function roundLabel(){ return L ? `${L.r}회${L.from==='A'?'초':'말'}` : ''; }
+
+/* ---------------- flow ---------------- */
+function hideAllPanels(){ ['#title','#modal','#share','#arrive','#pitchBar','#batHint'].forEach(s=>show(s,false)); }
+function toTitle(){
+  clearLater(); hideBanner(); hideAllPanels(); show('#hud', false); show('#title', true);
+  G.state='title'; G.mode=null; F=null; H=null; L=null; stroke=[]; strokeAlpha=0; ring=null;
+  ball.visible=false; trail.count=0;
+  setBatter(LV[G.level].bat); setPitcher(LV[G.level].pit.cap); poseBatter(0);
+  setView('title');
+  try{ if(location.hash) history.replaceState(null,'',location.pathname+location.search); }catch(e){}
+  renderLevels();
+}
+function startSolo(mode, l){
+  clearLater(); hideAllPanels(); hideBanner();
+  Object.assign(G, {mode, level:l, b:0, s:0, o:0, runs:0, bases:[0,0,0], pitchNo:0, batting: mode==='bat'});
+  L = null;
+  const lv = LV[l];
+  if(mode==='pitch'){ setBatter(lv.bat); setPitcher(0x1f2a5a); }
+  else { setBatter(MY_BATTER); setPitcher(lv.pit.cap); }
+  updateHUD();
+  const who = mode==='pitch' ? lv.bat : lv.pit;
+  showBanner(`Lv${l+1} ${who.name}`, mode==='pitch' ? '3아웃 잡으면 클리어 · 3점 주면 패배' : `3아웃 전에 ${lv.target}점 내면 클리어`, 1800, 'blue');
+  nextPitch(1500);
+}
+function nextPitch(delay){
+  resetForPitch();
+  if(G.batting){
+    G.state = 'wait'; show('#batHint', true);
+    later(delay||700, cpuWindup);
+  } else {
+    G.state = 'pitchReady'; show('#pitchBar', true);
+  }
+}
+function resetForPitch(){
+  F = null; H = null; ball.visible = false; trail.count = 0; stroke = []; strokeAlpha = 0; ring = null;
+  batter.userData.swing = -1; batter.userData.hurt = 0; poseBatter(0);
+  resetMitt();
+  setView(G.batting ? 'bat' : 'pitch');
+  if(G.batting){ const c = toScreen(tmpV.set(0, 0.78, 0)); ring = {x:c.x, y:c.y}; }
+}
+function cpuWindup(){
+  G.pitchNo++;
+  showBanner(`${G.pitchNo}구째`, '', 900, 'blue');
+  G.state = 'windup';
+  pitcher.userData.throwT = 0;
+  later(480, ()=>{
+    let p;
+    if(G.mode==='link-bat') p = L.pitch;
+    else p = genPitch(G.level);
+    throwPitch(p);
+  });
+}
+
+function throwPitch(p){
+  show('#pitchBar', false);
+  const br = BALLS[p.ball].r;
+  F = {p, t:0, br, phase:'fly', swung:false, whiff:false, hbpU:null, cpu:null, dotT:0, done:false};
+  // hit-by-pitch check against the batter's body
+  const s = batter.userData.look.scale || 1, hw = 0.3*s + br, top = 1.75*s + br;
+  for(let i=0;i<=240;i++){
+    const u = i/240; pathAt(p, u, br, tmpV);
+    if(tmpV.z > 0.7) continue;
+    if(Math.abs(tmpV.x - BATTER_X) < hw && tmpV.y > 0.08 && tmpV.y < top){ F.hbpU = u; break; }
+  }
+  if(G.mode==='pitch') F.cpu = cpuDecide(p);
+  ball.visible = true; ball.scale.setScalar(br);
+  pathAt(p, 0, br, ball.position);
+  G.state = 'flight';
+  sfx.whoosh();
+  showTicker(`물리법칙 위반 ${Math.round(p.turn).toLocaleString()}° · ${kmh(p.T)}km/h`, 1900);
+}
+
+function cpuDecide(p){
+  const lv = LV[G.level], ai = lv.ai, bt = BALLS[p.ball];
+  const inZone = isStrike(p);
+  const swing = Math.random() < (inZone ? ai.eye : ai.chase);
+  const [ex,ey] = pathXY(p,1), [mx,my] = pathXY(p,0.8);
+  const late = Math.hypot(ex-mx, ey-my);
+  const weird = Math.exp(-p.turn/ai.tol);
+  const lateF = Math.exp(-late/(0.6+G.level*0.25));
+  const speedF = Math.sqrt(clamp(p.T/0.9, 0.6, 1.3));
+  const pc = ai.contact * (0.35+0.65*weird) * (0.4+0.6*lateF) * speedF * bt.cpu * (inZone?1:0.55);
+  const contact = swing && Math.random() < pc;
+  const uContact = 1 - 0.35/Z0;
+  const r = {swing, contact, uContact, tSwing: uContact*p.T - 0.1};
+  if(contact){
+    const q = Math.pow(Math.random(), 1/(0.8+G.level*0.25));
+    const phi = rnd(3, 48), theta = rnd(-55, 55);
+    r.hit = {theta, phi, q, D:(40+85*q)*ai.power*angleF(phi)*bt.dist};
+  }
+  return r;
+}
+function angleF(phi){ return Math.max(0.25, Math.cos((phi-28)*Math.PI/180*1.6)); }
+
+function classifyHit(h){
+  const {theta, phi, D, q} = h;
+  if(Math.abs(theta) > 45) return {kind:'foul'};
+  if(D >= fenceR(theta) && phi > 12) return {kind:'hr'};
+  if(phi < 8) return q > 0.7 ? {kind:'single'} : {kind:'out', label:'땅볼 아웃'};
+  if(phi > 50) return {kind:'out', label:'내야 뜬공'};
+  if(D >= 78) return {kind:'double'};
+  if(D >= 45) return q > 0.42 ? {kind:'single'} : {kind:'out', label:'뜬공 아웃'};
+  return q > 0.6 ? {kind:'single'} : {kind:'out', label:'뜬공 아웃'};
+}
+
+function startSwing(){ batter.userData.swing = 0; sfx.whoosh(); }
+
+function playerSwing(pt){
+  if(!F || F.phase!=='fly' || F.swung) return;
+  F.swung = true; ringFlash = 1; startSwing();
+  const z = ball.position.z;
+  if(z > 2.6 || z < -0.4){ F.whiff = true; return; }
+  const sp = toScreen(ball.position);
+  const R = ringRadius();
+  const dx = pt.x - sp.x, dy = pt.y - sp.y, dist = Math.hypot(dx,dy);
+  if(dist > R){ F.whiff = true; return; }
+  const aim = 1 - dist/R, tq = clamp(1 - Math.abs(z-0.5)/1.8, 0, 1);
+  const q = clamp(0.55*aim + 0.45*tq, 0, 1);
+  const theta = (z-0.5)*24 + rnd(-6,6);
+  const phi = clamp(22 + (dy/R)*38 + rnd(-4,4), -5, 72);
+  const D = (55+85*q) * angleF(phi) * BALLS[F.p.ball].dist;
+  startHit(ball.position.clone(), {theta, phi, q, D});
+}
+
+function startHit(start, h){
+  const res = classifyHit(h);
+  F.phase = 'hit';
+  show('#batHint', false);
+  sfx.crack();
+  const th = h.theta*Math.PI/180;
+  let D = h.D;
+  const ground = h.phi < 8;
+  if(ground) D = Math.min(D, 45);
+  if(res.kind==='foul') D = Math.min(D, 60);
+  const Lpt = new THREE.Vector3(start.x + Math.sin(th)*D, 0, start.z + Math.cos(th)*D);
+  const apex = ground ? 0.4 : Math.max(0.8, D*Math.tan(clamp(h.phi,5,75)*Math.PI/180)/4);
+  H = {start, L:Lpt, apex, ground, tf: ground ? clamp(D/28, 0.9, 2) : clamp(0.9 + D/48, 1.1, 3.2), t:0, dotT:0, res, D:Math.round(h.D), done:false};
+  trail.count = 0;
+  later(120, ()=>{ setView('hit'); camLook.copy(start); });
+}
+
+function resolve(kind, info){
+  if(F) F.done = true;
+  info = info || {};
+  if(G.mode==='pitch' || G.mode==='bat') soloResult(kind, info);
+  else if(G.mode==='link-bat') linkBatResult(kind, info);
+  else if(G.mode==='link-pitch') linkPitchResult(kind, info);
+}
+
+const KIND_TEXT = {strike:'스트라이크!', swstrike:'헛스윙!', ball:'볼', foul:'파울', hbp:'몸에 맞는 공!', single:'안타!', double:'2루타!', hr:'홈런!'};
+function soloResult(kind, info){
+  G.state = 'result';
+  let big = info.label || KIND_TEXT[kind] || '', sub = '', tone = '';
+  const before = G.runs;
+  const newPA = () => { G.b = 0; G.s = 0; };
+  const out = () => { G.o++; newPA(); };
+  const walk = () => { const b=G.bases; if(b[0]){ if(b[1]){ if(b[2]) G.runs++; b[2]=1; } b[1]=1; } b[0]=1; newPA(); };
+  const adv = n => { const b=G.bases; for(let i=2;i>=0;i--){ if(b[i]){ b[i]=0; if(i+n>=3) G.runs++; else b[i+n]=1; } } if(n>=4) G.runs++; else b[n-1]=1; newPA(); };
+  switch(kind){
+    case 'strike': case 'swstrike': G.s++; if(G.s>=3){ big='삼진 아웃!'; out(); } break;
+    case 'foul': if(G.s<2) G.s++; break;
+    case 'ball': G.b++; if(G.b>=4){ big='볼넷!'; walk(); } break;
+    case 'hbp': walk(); break;
+    case 'single': adv(1); sub = `${info.D}m`; break;
+    case 'double': adv(2); sub = `${info.D}m`; break;
+    case 'hr': adv(4); sub = `나이스! ${info.D}m`; sfx.cheer(); break;
+    case 'out': out(); break;
+  }
+  const scored = G.runs - before;
+  if(scored>0) sub = (sub? sub+' · ' : '') + `${scored}점 ${G.mode==='pitch'?'실점':'득점'}`;
+  if(G.mode==='pitch'){ tone = ['strike','swstrike','out'].includes(kind) || big==='삼진 아웃!' ? 'blue' : (scored? 'red':''); }
+  else { tone = ['single','double','hr'].includes(kind) ? '' : 'blue'; }
+  updateHUD();
+  showBanner(big, sub, 1500, tone);
+  later(1700, ()=>{
+    const lv = LV[G.level];
+    if(G.mode==='pitch'){
+      if(G.runs >= 3) return endSolo(false);
+      if(G.o >= 3) return endSolo(true);
+    } else {
+      if(G.runs >= lv.target) return endSolo(true);
+      if(G.o >= 3) return endSolo(false);
+    }
+    nextPitch();
+  });
+}
+function endSolo(win){
+  G.state = 'end'; show('#batHint', false); show('#pitchBar', false);
+  if(win){ saveClear(G.mode, G.level); sfx.cheer(); }
+  const lv = LV[G.level];
+  $('#mEye').textContent = `Lv${G.level+1} · ${G.mode==='pitch' ? '투구' : '타격'}`;
+  $('#mTitle').textContent = win ? '클리어!' : '아쉽다!';
+  $('#mText').innerHTML = G.mode==='pitch'
+    ? `<b>${lv.bat.name}</b> 상대로 ${G.o}아웃 · ${G.runs}실점`
+    : `<b>${lv.pit.name}</b> 상대로 ${G.runs}점 득점 (목표 ${lv.target}점)`;
+  const btns = $('#mBtns'); btns.innerHTML = '';
+  const mk = (txt, cls, fn) => { const b=document.createElement('button'); b.className='btn '+cls; b.textContent=txt; b.onclick=fn; btns.appendChild(b); };
+  if(win && G.level < LV.length-1) mk('다음 레벨', 'red', ()=>{ G.level++; startSolo(G.mode, G.level); });
+  mk('다시 하기', win && G.level < LV.length-1 ? 'ink' : 'red', ()=>startSolo(G.mode, G.level));
+  mk('처음으로', 'ghost', toTitle);
+  if(btns.children.length===3) btns.lastChild.style.gridColumn='1/-1';
+  show('#modal', true);
+}
+
+/* ---------------- link battle ---------------- */
+const LINK_PTS = {hr:4, double:2, single:1, ball:1, hbp:1};
+function startLinkNew(){
+  L = {r:1, s:[0,0], from:'A', role:'A', done:false, pitch:null};
+  startLinkPitch(1200);
+}
+function startLinkPitch(delay){
+  clearLater(); hideAllPanels();
+  G.mode = 'link-pitch'; G.batting = false;
+  L.from = L.role;
+  setBatter(OPP_BATTER); setPitcher(0x1f2a5a);
+  updateHUD();
+  showBanner(roundLabel(), '이제 네가 던질 차례!', 1600, 'blue');
+  resetForPitch();
+  G.state = 'wait';
+  later(delay||900, ()=>{ G.state='pitchReady'; show('#pitchBar', true); });
+}
+function linkPitchResult(kind){
+  G.state = 'result';
+  const t = {strike:['스트라이크!','blue'], ball:['볼… 상대가 1점 가져가','red'], hbp:['몸에 맞는 공!','red']}[kind] || ['다 던졌다!','blue'];
+  showBanner(t[0], '', 1300, t[1]);
+  later(1400, showShare);
+}
+function showShare(){
+  G.state = 'share'; show('#pitchBar', false);
+  const me = L.role==='A'?0:1;
+  const code = encodeLink({r:L.r, s:L.s, from:L.from, done:false}, L.myPitch);
+  const url = linkFor(code);
+  $('#sEye').textContent = `${roundLabel()} · 다 던졌다!`;
+  $('#sMe').textContent = L.s[me]; $('#sOp').textContent = L.s[1-me];
+  $('#sMsg').innerHTML = '<b>이 링크를 상대에게 보내자</b><br>상대가 치고 다시 던져 올 때까지 기다리면 돼';
+  $('#sLink').value = url; $('#sLink').dataset.code = code; $('#sToast').textContent = '';
+  show('#sCopyCode', true);
+  show('#share', true);
+}
+function handleArrival(code){
+  let d;
+  try{ d = decodeLink(code); }catch(e){ return false; }
+  clearLater(); hideAllPanels(); hideBanner(); show('#hud', false);
+  const role = d.st.from==='A' ? 'B' : 'A';
+  L = {r:d.st.r, s:d.st.s.slice(), from:d.st.from, role, done:d.st.done, pitch:d.p};
+  setBatter(MY_BATTER); setPitcher(0xd8322b); setView('title');
+  if(L.done || !L.pitch){ showFinal(false); return true; }
+  const me = role==='A'?0:1;
+  $('#aMsg').textContent = '대전이 도착했어!';
+  $('#aSt').textContent = `${roundLabel()} · 나 ${L.s[me]} - ${L.s[1-me]} 상대`;
+  $('#aSm').textContent = `친구가 던진 마구 · ${kmh(L.pitch.T)}km/h · ${BALLS[L.pitch.ball].name}`;
+  G.state = 'arrive';
+  show('#arrive', true);
+  return true;
+}
+function startLinkBat(){
+  hideAllPanels();
+  G.mode = 'link-bat'; G.batting = true; G.pitchNo = 0;
+  updateHUD();
+  showBanner(roundLabel(), '친구의 마구를 쳐라!', 1500, 'blue');
+  nextPitch(1500);
+}
+function linkBatResult(kind, info){
+  G.state = 'result';
+  const pts = LINK_PTS[kind] || 0;
+  const me = L.role==='A'?0:1;
+  L.s[me] += pts;
+  let big = info.label || KIND_TEXT[kind] || '';
+  if(kind==='ball') big = '볼! 골라냈다';
+  if(kind==='hr') sfx.cheer();
+  updateHUD();
+  showBanner(big, pts ? `+${pts}점` : '0점', 1600, pts ? '' : 'blue');
+  later(1800, ()=>{
+    if(L.role==='B'){ startLinkPitch(); }
+    else if(L.r >= ROUNDS){ L.done = true; showFinal(true); }
+    else { L.r++; startLinkPitch(); }
+  });
+}
+function showFinal(canSend){
+  G.state = 'final'; show('#hud', false); show('#batHint', false);
+  const me = L.role==='A'?0:1, a = L.s[me], b = L.s[1-me];
+  $('#mEye').textContent = `링크 대전 · ${ROUNDS}회 종료`;
+  $('#mTitle').textContent = a>b ? '승리!' : a<b ? '패배…' : '무승부';
+  $('#mText').innerHTML = `<b style="font-size:22px">나 ${a} - ${b} 상대</b>` + (canSend ? '<br>결과 링크를 보내면 친구도 최종 점수를 볼 수 있어' : '');
+  const btns = $('#mBtns'); btns.innerHTML = '';
+  const mk = (txt, cls, fn) => { const x=document.createElement('button'); x.className='btn '+cls; x.textContent=txt; x.onclick=fn; btns.appendChild(x); };
+  if(canSend){
+    mk('결과 링크 보기', 'red', ()=>{
+      hideAllPanels();
+      const code = encodeLink({r:L.r, s:L.s, from:'A', done:true}, null);
+      $('#sEye').textContent = '경기 끝!';
+      $('#sMe').textContent = a; $('#sOp').textContent = b;
+      $('#sMsg').innerHTML = '<b>결과 링크를 친구에게 보내자</b>';
+      $('#sLink').value = linkFor(code); $('#sLink').dataset.code = code; $('#sToast').textContent='';
+      show('#share', true);
+    });
+  }
+  mk('새 대전', canSend?'ink':'red', ()=>{ hideAllPanels(); startLinkNew(); });
+  mk('처음으로', 'ghost', toTitle);
+  btns.lastChild.style.gridColumn = '1/-1';
+  show('#modal', true);
+}
+
+/* ---------------- drawing (pitch) ---------------- */
+function pt(e){ const r = ov.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top, t:performance.now()}; }
+ov.addEventListener('pointerdown', e=>{
+  audioInit();
+  const p = pt(e);
+  if(G.state==='pitchReady'){
+    drawing = true; stroke = [p]; strokeT0 = p.t; strokeAlpha = 1;
+    try{ ov.setPointerCapture(e.pointerId); }catch(_){}
+    show('#pitchBar', false);
+  } else if(G.batting && (G.state==='flight' || G.state==='windup' || G.state==='wait')){
+    ring = p;
+    if(G.state==='flight') playerSwing(p);
+  }
+});
+ov.addEventListener('pointermove', e=>{
+  const p = pt(e);
+  if(drawing){ const l = stroke[stroke.length-1]; if(Math.hypot(p.x-l.x, p.y-l.y) >= 2) stroke.push(p); }
+  else if(G.batting && e.pointerType==='mouse') ring = p;
+});
+const endDraw = () => { if(!drawing) return; drawing = false; finishStroke(); };
+ov.addEventListener('pointerup', endDraw);
+ov.addEventListener('pointercancel', endDraw);
+
+function finishStroke(){
+  if(stroke.length < 4 || polyLen(stroke) < 60){
+    stroke = []; showBanner('더 길게 그려!', '', 900, 'blue'); show('#pitchBar', true); return;
+  }
+  const dur = (stroke[stroke.length-1].t - strokeT0)/1000;
+  const turn = turnDeg(stroke, 6);
+  const n = clamp(Math.ceil(turn/360*16) + 30, 40, 220);
+  const rs = resample(stroke, n);
+  camera.updateMatrixWorld();
+  const xy = new Float32Array(n*2), cp = camera.position;
+  for(let i=0;i<n;i++){
+    const u = i/(n-1), z = Z0*(1-u);
+    tmpV.set(rs[i].x/VW*2-1, -(rs[i].y/VH)*2+1, 0.5).unproject(camera).sub(cp).normalize();
+    const t = (z - cp.z)/tmpV.z;
+    xy[2*i] = cp.x + tmpV.x*t; xy[2*i+1] = Math.max(0.02, cp.y + tmpV.y*t);
+  }
+  let p = {n, xy, T:clamp(0.4 + dur*0.28, 0.5, 1.6), turn, ball:G.ballType};
+  if(G.mode==='link-pitch'){ p = quantize(p); L.myPitch = p; }
+  throwPitch(p);
+}
+
+/* ---------------- screen helpers ---------------- */
+function toScreen(v){ tmpV2.copy(v).project(camera); return {x:(tmpV2.x+1)/2*VW, y:(1-tmpV2.y)/2*VH}; }
+function ringRadius(){
+  const a = toScreen(tmpV.set(0,0.8,0)), b = toScreen(tmpV.set(0.21,0.8,0));
+  const bt = F ? BALLS[F.p.ball] : BALLS[0];
+  return Math.abs(b.x-a.x) * bt.ring;
+}
+function drawOverlay(){
+  octx.setTransform(DPR,0,0,DPR,0,0); octx.clearRect(0,0,VW,VH);
+  if((view==='pitch' || view==='bat') && G.state!=='title'){
+    const c = [[-ZONE.x,ZONE.y0],[ZONE.x,ZONE.y0],[ZONE.x,ZONE.y1],[-ZONE.x,ZONE.y1]].map(q=>toScreen(tmpV.set(q[0],q[1],0)));
+    octx.lineWidth = 2; octx.strokeStyle = 'rgba(255,255,255,.8)';
+    octx.beginPath(); c.forEach((q,i)=> i?octx.lineTo(q.x,q.y):octx.moveTo(q.x,q.y)); octx.closePath(); octx.stroke();
+  }
+  if(stroke.length > 1 && strokeAlpha > 0){
+    octx.globalAlpha = strokeAlpha; octx.lineCap = 'round'; octx.lineJoin = 'round';
+    octx.beginPath(); stroke.forEach((p,i)=> i?octx.lineTo(p.x,p.y):octx.moveTo(p.x,p.y));
+    octx.strokeStyle = 'rgba(255,255,255,.85)'; octx.lineWidth = 9; octx.stroke();
+    octx.strokeStyle = '#ec2f25'; octx.lineWidth = 5; octx.stroke();
+    octx.globalAlpha = 1;
+  }
+  if(G.batting && ring && G.state!=='title'){
+    const R = ringRadius();
+    octx.lineWidth = 4; octx.strokeStyle = ringFlash>0 ? `rgba(255,255,255,${0.5+ringFlash*0.5})` : '#ffd23f';
+    octx.beginPath(); octx.arc(ring.x, ring.y, R, 0, Math.PI*2); octx.stroke();
+    octx.lineWidth = 2; octx.strokeStyle = 'rgba(255,255,255,.9)';
+    octx.beginPath(); octx.arc(ring.x, ring.y, R*0.28, 0, Math.PI*2); octx.stroke();
+  }
+}
+
+/* ---------------- main loop ---------------- */
+let last = performance.now();
+const camTarget = new THREE.Vector3();
+function frame(now){
+  const dt = Math.min(0.05, (now-last)/1000); last = now;
+  update(dt);
+  renderer.render(scene, camera);
+  drawOverlay();
+  requestAnimationFrame(frame);
+}
+function update(dt){
+  if(view==='title'){
+    titleAng += dt*0.12;
+    camera.position.set(Math.sin(titleAng)*16, 6.5, 8 - Math.cos(titleAng)*20);
+    camera.lookAt(0, 1, 8);
+  }
+  // pitcher animation
+  const pu = pitcher.userData;
+  if(pu.throwT >= 0){
+    pu.throwT += dt/0.75; const t = pu.throwT;
+    pu.armR.rotation.x = t<0.55 ? 2.6*ease(t/0.55) : t<0.68 ? lerp(2.6,-1.4,(t-0.55)/0.13) : lerp(-1.4,0,clamp((t-0.68)/0.32,0,1));
+    pu.body.rotation.x = t<0.55 ? -0.1*ease(t/0.55) : t<0.8 ? lerp(-0.1,0.35,(t-0.55)/0.25) : lerp(0.35,0,clamp((t-0.8)/0.2,0,1));
+    if(t >= 1){ pu.throwT = -1; pu.armR.rotation.x = 0; pu.body.rotation.x = 0; }
+  }
+  // batter animation
+  const bu = batter.userData;
+  if(bu.swing >= 0){ bu.swing = Math.min(1, bu.swing + dt/0.3); poseBatter(bu.swing); }
+  if(bu.hurt > 0){ bu.hurt = Math.max(0, bu.hurt - dt); bu.body.rotation.z = Math.sin(bu.hurt*40)*0.12*bu.hurt; bu.body.rotation.x = -0.25*Math.min(1,bu.hurt*2); }
+  if(ringFlash > 0) ringFlash = Math.max(0, ringFlash - dt*3);
+  // mitt
+  mitt.position.lerp(mitt.userData.target, 1 - Math.exp(-dt*10));
+  // stroke fade after throw
+  if(!drawing && F && strokeAlpha > 0 && F.phase!=='fly') strokeAlpha = Math.max(0, strokeAlpha - dt*1.5);
+
+  if(F && !F.done) updateFlight(dt);
+  if(H && !H.done) updateHit(dt);
+}
+function updateFlight(dt){
+  const p = F.p;
+  if(F.phase==='fly'){
+    F.t += dt;
+    const u = F.t / p.T;
+    if(F.hbpU!==null && u >= F.hbpU){
+      pathAt(p, F.hbpU, F.br, ball.position);
+      F.phase = 'hbp'; F.ht = 0; F.vel = new THREE.Vector3(rnd(-1,1), 2.5, 3.5);
+      batter.userData.hurt = 0.7; sfx.thud(); return;
+    }
+    if(u >= 1){
+      pathAt(p, 1, F.br, ball.position);
+      const end = ball.position.clone();
+      const catchable = Math.abs(end.x) < 1.0 && end.y > 0.08 && end.y < 1.9;
+      pathAt(p, 0.985, F.br, tmpV);
+      F.phase = 'post'; F.pt = 0; F.from = end; F.catchable = catchable;
+      F.vel = end.clone().sub(tmpV).multiplyScalar(1/(0.015*p.T));
+      F.to = catchable ? new THREE.Vector3(end.x, end.y, -0.72) : null;
+      return;
+    }
+    pathAt(p, u, F.br, ball.position);
+    ball.rotation.x += dt*30;
+    if(F.cpu){
+      if(F.cpu.swing && !F.swung && F.t >= F.cpu.tSwing){ F.swung = true; startSwing(); if(!F.cpu.contact) F.whiff = true; }
+      if(F.cpu.contact && u >= F.cpu.uContact){ startHit(ball.position.clone(), F.cpu.hit); return; }
+    }
+    if(view==='bat'){
+      F.dotT += dt;
+      if(F.dotT > 0.03){ F.dotT = 0; addDot(ball.position, 0.028); }
+    }
+    if(u > 0.45 && mitt.visible){
+      const [ex,ey] = pathXY(p,1);
+      if(Math.abs(ex)<1.0 && ey>0.08 && ey<1.9) mitt.userData.target.set(ex, ey, -0.72);
+    }
+  } else if(F.phase==='post'){
+    F.pt += dt;
+    if(F.catchable && view!=='bat'){
+      const k = Math.min(1, F.pt/0.07);
+      ball.position.lerpVectors(F.from, F.to, k);
+      if(k>=1 && !F.popped){ F.popped = true; sfx.pop(); }
+    } else {
+      ball.position.addScaledVector(F.vel, dt);
+      if(F.catchable && ball.position.z < -0.6 && !F.popped){ F.popped = true; sfx.pop(); ball.visible = false; }
+    }
+    if(F.pt > 0.45){
+      const kind = F.whiff ? 'swstrike' : (isStrike(p) ? 'strike' : 'ball');
+      resolve(kind);
+    }
+  } else if(F.phase==='hbp'){
+    F.ht += dt;
+    F.vel.y -= 9.8*dt;
+    ball.position.addScaledVector(F.vel, dt);
+    if(ball.position.y < F.br){ ball.position.y = F.br; F.vel.y *= -0.4; F.vel.x *= 0.7; F.vel.z *= 0.7; }
+    if(F.ht > 0.8) resolve('hbp');
+  }
+}
+function updateHit(dt){
+  H.t += dt;
+  const f = Math.min(1, H.t/H.tf);
+  const x = lerp(H.start.x, H.L.x, f), z = lerp(H.start.z, H.L.z, f);
+  let y;
+  if(H.ground) y = Math.max(0.06, H.start.y*(1-Math.min(1,f*4)) + 0.5*Math.abs(Math.sin(f*Math.PI*3))*(1-f));
+  else y = Math.max(0.06, lerp(H.start.y, 0.06, f) + 4*H.apex*f*(1-f));
+  ball.position.set(x, y, z);
+  if(view==='hit'){
+    const d = camera.position.distanceTo(ball.position);
+    ball.scale.setScalar(Math.max(0.06, F.br) * Math.max(1, d/10));
+    H.dotT += dt;
+    if(H.dotT > 0.05){ H.dotT = 0; addDot(ball.position, 0.05*Math.max(1, d/9)); }
+    camLook.lerp(ball.position, 1 - Math.exp(-dt*5));
+    camera.lookAt(camLook);
+  }
+  const foulCut = H.res.kind==='foul' && H.t > 1.3;
+  if((f >= 1 || foulCut) && !H.done){
+    H.done = true;
+    later(H.res.kind==='hr' ? 500 : 250, ()=> resolve(H.res.kind, {D:H.D, label:H.res.label}));
+  }
+}
+
+/* ---------------- title UI ---------------- */
+function renderLevels(){
+  const c = loadClears(), row = $('#lvRow'); row.innerHTML = '';
+  LV.forEach((lv,i)=>{
+    const b = document.createElement('button'); b.className='lv'; b.setAttribute('aria-pressed', i===G.level);
+    const marks = (c.pitch.includes(i)?'투✓':'') + (c.bat.includes(i)?' 타✓':'');
+    b.innerHTML = `Lv${i+1}<small>${marks.trim()}</small>`;
+    b.onclick = () => { G.level = i; renderLevels(); setBatter(LV[i].bat); setPitcher(LV[i].pit.cap); };
+    row.appendChild(b);
+  });
+  const lv = LV[G.level];
+  $('#lvInfo').innerHTML = `투구 상대 <b>${lv.bat.name}</b> · ${lv.bat.desc}<br>타격 상대 <b>${lv.pit.name}</b> · ${lv.pit.desc} (목표 ${lv.target}점)`;
+}
+$('#goPitch').onclick = () => { audioInit(); startSolo('pitch', G.level); };
+$('#goBat').onclick = () => { audioInit(); startSolo('bat', G.level); };
+$('#goLink').onclick = () => { audioInit(); startLinkNew(); };
+$('#codeGo').onclick = () => {
+  audioInit();
+  const code = extractCode($('#codeIn').value);
+  if(!code || !handleArrival(code)){ $('#codeIn').value=''; $('#codeIn').placeholder='코드를 읽을 수 없어. 다시 붙여넣어 줘'; }
+};
+$('#codeIn').addEventListener('keydown', e=>{ if(e.key==='Enter') $('#codeGo').click(); });
+$('#aGo').onclick = () => { if(!L || !L.pitch) return; audioInit(); startLinkBat(); };
+$('#menuBtn').onclick = toTitle;
+$('#sHome').onclick = toTitle;
+document.querySelectorAll('#balls .chip').forEach(ch=>{
+  ch.onclick = () => { G.ballType = +ch.dataset.b; document.querySelectorAll('#balls .chip').forEach(c=>c.setAttribute('aria-pressed', c===ch)); };
+});
+function copyText(text, okMsg){
+  const toast = $('#sToast');
+  const fallback = () => { const ta = $('#sLink'); ta.focus(); ta.select(); toast.textContent = '선택됐어. 길게 눌러서 복사해 줘'; };
+  try{
+    navigator.clipboard.writeText(text).then(()=>{ toast.textContent = okMsg; }, fallback);
+  }catch(e){ fallback(); }
+}
+$('#sCopyLink').onclick = () => copyText($('#sLink').value, '링크 복사됨! 친구한테 보내자');
+$('#sCopyCode').onclick = () => copyText($('#sLink').dataset.code || '', '코드 복사됨!');
+
+/* ---------------- boot ---------------- */
+buildField();
+buildActors();
+new ResizeObserver(resize).observe(app);
+resize();
+const bootHash = location.hash || '';
+toTitle();
+function checkHash(h){ h = typeof h==='string' ? h : (location.hash || ''); if(h.startsWith('#nb.')){ const c = extractCode(h); if(c) handleArrival(c); } }
+checkHash(bootHash);
+window.addEventListener('hashchange', checkHash);
+requestAnimationFrame(frame);
+window.__G = {G, playerSwing, get F(){return F}, get H(){return H}, get L(){return L}, startSolo, throwPitch, genPitch, encodeLink, decodeLink, handleArrival, toScreen, get ball(){return ball}};
+})();
+</script>
+
+</body>
+</html>
