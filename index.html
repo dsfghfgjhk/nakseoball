@@ -65,10 +65,6 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yellow);outline
 #pitchBar{position:absolute;left:0;right:0;bottom:0;padding:0 12px calc(14px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
 #hint{background:rgba(27,35,71,.82);color:#fff;border-radius:12px;padding:8px 14px;text-align:center;font-size:13px;font-weight:600;line-height:1.45}
 #hint b{color:var(--yellow);font-weight:800}
-#balls{display:flex;gap:6px;pointer-events:auto}
-.chip{background:rgba(255,255,255,.92);color:var(--ink);border-radius:999px;padding:7px 12px;font-size:13px;font-weight:800;display:flex;align-items:center;gap:6px;box-shadow:0 2px 0 rgba(0,0,0,.18)}
-.chip .bd{width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #d33}
-.chip[aria-pressed="true"]{background:var(--ink);color:#fff}
 #batHint{position:absolute;left:0;right:0;bottom:calc(16px + env(safe-area-inset-bottom,0px));text-align:center;pointer-events:none}
 #batHint span{display:inline-block;background:rgba(27,35,71,.82);color:#fff;border-radius:12px;padding:8px 14px;font-size:13px;font-weight:600}
 #batHint b{color:var(--yellow)}
@@ -156,11 +152,6 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yellow);outline
 
   <div id="pitchBar" hidden>
     <div id="hint">화면에 <b>공이 날아갈 길</b>을 그려!<br>선이 끝나는 곳으로 공이 들어가. 네모 안이면 스트라이크</div>
-    <div id="balls" role="group" aria-label="공 고르기">
-      <button class="chip" data-b="0" aria-pressed="true"><span class="bd"></span>야구공</button>
-      <button class="chip" data-b="1" aria-pressed="false"><span class="bd" style="width:16px;height:16px"></span>대왕공</button>
-      <button class="chip" data-b="2" aria-pressed="false"><span class="bd" style="width:8px;height:8px;border-width:1.5px"></span>콩알공</button>
-    </div>
   </div>
   <div id="batHint" hidden><span id="batHintText">날아오는 공을 <b>타이밍 맞춰 터치</b>해서 쳐!</span></div>
 
@@ -246,7 +237,7 @@ const ARTIFACT_URL = '';
 const ROUNDS = 3;
 const Z0 = 17;                       // depth where every pitch path starts (m from plate)
 const ZONE = {x:0.26, y0:0.45, y1:1.1};
-const BATTER_X = 0.8;
+const BATTER_X = 1.15;
 
 const $ = s => document.querySelector(s);
 const rnd = (a,b) => a + Math.random()*(b-a);
@@ -495,7 +486,7 @@ function addDot(p, r){ if(trail.count >= 220) return; dummy.position.copy(p); du
 /* ---------------- views ---------------- */
 const VIEWS = {
   pitch:{pos:[0,1.95,19.6], look:[0,0.8,0], v:16.5, h:10.5},
-  bat:  {pos:[0.05,1.55,-4.4], look:[0,1.0,18.4], v:26, h:17},
+  bat:  {pos:[0.25,1.6,-4.4], look:[0,1.0,18.4], v:27, h:23},
   hit:  {pos:[0,9,-15], look:[0,2,10], v:44, h:40},
   title:{pos:[10,6,-12], look:[0,1,8], v:36, h:30},
 };
@@ -603,7 +594,7 @@ function decodeLink(code){
     if(b.length < 12+n*4) throw new Error('short');
     const xy = new Float32Array(n*2);
     for(let i=0;i<n;i++){ xy[2*i] = dv.getInt16(12+i*4)/100; xy[2*i+1] = dv.getInt16(14+i*4)/100; }
-    p = {n, xy, T:clamp(dv.getUint16(6)/1000, 0.3, 3), turn:dv.getUint16(8), ball:clamp(dv.getUint8(5),0,2)};
+    p = {n, xy, T:clamp(dv.getUint16(6)/1000, 0.3, 3), turn:dv.getUint16(8), ball:0};
   }
   return {st, p};
 }
@@ -914,7 +905,7 @@ function handleArrival(code){
   const me = role==='A'?0:1;
   $('#aMsg').textContent = '대전이 도착했어!';
   $('#aSt').textContent = `${roundLabel()} · 나 ${L.s[me]} - ${L.s[1-me]} 상대`;
-  $('#aSm').textContent = `친구가 던진 마구 · ${kmh(L.pitch.T)}km/h · ${BALLS[L.pitch.ball].name}`;
+  $('#aSm').textContent = `친구가 던진 마구 · ${kmh(L.pitch.T)}km/h`;
   G.state = 'arrive';
   show('#arrive', true);
   return true;
@@ -1052,7 +1043,7 @@ function rtOnMsg(m){
   if(m.t==='start'){ if(!RT.started) rtStart(); }
   else if(m.t==='pitch'){
     const p = m.p; if(!p || !Array.isArray(p.xy)) return;
-    RT.pendingPitch = {n:p.n, xy:Float32Array.from(p.xy), T:clamp(+p.T||1,0.3,3), turn:+p.turn||0, ball:clamp(p.ball|0,0,2)};
+    RT.pendingPitch = {n:p.n, xy:Float32Array.from(p.xy), T:clamp(+p.T||1,0.3,3), turn:+p.turn||0, ball:0};
     if(G.mode==='rt-bat' && G.state==='rtwait') rtTakePitch();
   }
   else if(m.t==='result'){
@@ -1201,7 +1192,7 @@ function finishStroke(){
     const t = (z - cp.z)/tmpV.z;
     xy[2*i] = cp.x + tmpV.x*t; xy[2*i+1] = Math.max(0.02, cp.y + tmpV.y*t);
   }
-  let p = {n, xy, T:clamp(0.4 + dur*0.28, 0.5, 1.6), turn, ball:G.ballType};
+  let p = {n, xy, T:clamp(0.4 + dur*0.28, 0.5, 1.6), turn, ball:0};
   if(G.mode==='link-pitch'){ p = quantize(p); L.myPitch = p; }
   if(G.mode==='rt-pitch'){ p = quantize(p); rtSend({t:'pitch', p:{n:p.n, xy:Array.from(p.xy), T:p.T, turn:Math.round(p.turn), ball:p.ball}}); RT.localDone = false; RT.incoming = null; }
   throwPitch(p);
@@ -1383,9 +1374,7 @@ $('#codeIn').addEventListener('keydown', e=>{ if(e.key==='Enter') $('#codeGo').c
 $('#aGo').onclick = () => { if(!L || !L.pitch) return; audioInit(); startLinkBat(); };
 $('#menuBtn').onclick = toTitle;
 $('#sHome').onclick = toTitle;
-document.querySelectorAll('#balls .chip').forEach(ch=>{
-  ch.onclick = () => { G.ballType = +ch.dataset.b; document.querySelectorAll('#balls .chip').forEach(c=>c.setAttribute('aria-pressed', c===ch)); };
-});
+
 function copyText(text, okMsg){
   const toast = $('#sToast');
   const fallback = () => { const ta = $('#sLink'); ta.focus(); ta.select(); toast.textContent = '선택됐어. 길게 눌러서 복사해 줘'; };
