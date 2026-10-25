@@ -38,16 +38,19 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yellow);outline
 #hud>*{pointer-events:auto}
 #menuBtn{width:38px;height:38px;border-radius:10px;background:rgba(27,35,71,.85);color:#fff;font-size:20px;line-height:1;display:grid;place-items:center;flex:none}
 .hudCard{background:rgba(27,35,71,.85);color:#fff;border-radius:10px;padding:6px 10px;font-size:12px;line-height:1.35;font-weight:600;min-width:0}
-#who{flex:1;min-width:0}
+#who{flex:1;min-width:0;text-align:right}
 #who b{display:block;font-family:var(--display);font-weight:400;font-size:15px;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#who span{opacity:.75;font-weight:600;font-size:11px}
-#board{display:grid;grid-template-columns:auto auto;gap:2px 10px;align-items:center;flex:none}
+#who span{display:block;opacity:.75;font-weight:600;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#board{display:flex;flex-direction:column;gap:3px;flex:none;padding:7px 10px 6px}
+#soloBoard{display:flex;gap:8px;align-items:center}
+.cnts{display:flex;flex-direction:column;gap:3px}
+#runners{font-weight:800;font-size:12px;color:var(--yellow);white-space:nowrap}
 .cnt{display:flex;gap:3px;align-items:center;font-variant-numeric:tabular-nums}
 .cnt i{font-style:normal;width:12px;font-weight:800;font-size:11px;opacity:.85}
-.dot{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.22)}
+.dot{width:11px;height:11px;border-radius:50%;background:rgba(255,255,255,.22)}
 .dot.b.on{background:#5fd36a}.dot.s.on{background:var(--yellow)}.dot.o.on{background:var(--red)}
-#bases{grid-row:span 3;width:40px;height:40px}
-#scoreLine{font-family:var(--display);font-size:15px;grid-column:1/-1;text-align:right;font-variant-numeric:tabular-nums}
+#bases{width:52px;height:46px}
+#scoreLine{font-family:var(--display);font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap}
 
 /* banners */
 #bannerWrap{position:absolute;left:0;right:0;top:20%;display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;text-align:center;padding:0 16px}
@@ -133,18 +136,25 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yellow);outline
 
   <div id="hud" hidden>
     <button id="menuBtn" aria-label="처음 화면으로">≡</button>
-    <div id="who" class="hudCard"><b id="whoName">Lv1 · 동네 야구왕</b><span id="whoDesc">일단 휘두르고 본다</span></div>
     <div id="board" class="hudCard">
-      <div class="cnt" id="cntB"><i>B</i><span class="dot b"></span><span class="dot b"></span><span class="dot b"></span></div>
-      <svg id="bases" viewBox="0 0 40 40" aria-hidden="true">
-        <rect id="b2" x="15" y="3" width="10" height="10" transform="rotate(45 20 8)" rx="1.5"/>
-        <rect id="b3" x="3" y="15" width="10" height="10" transform="rotate(45 8 20)" rx="1.5"/>
-        <rect id="b1" x="27" y="15" width="10" height="10" transform="rotate(45 32 20)" rx="1.5"/>
-      </svg>
-      <div class="cnt" id="cntS"><i>S</i><span class="dot s"></span><span class="dot s"></span></div>
-      <div class="cnt" id="cntO"><i>O</i><span class="dot o"></span><span class="dot o"></span></div>
+      <div id="soloBoard">
+        <svg id="bases" viewBox="0 0 52 46" aria-hidden="true">
+          <rect id="b2" x="20.5" y="3.5" width="11" height="11" transform="rotate(45 26 9)" rx="1.5"/>
+          <rect id="b3" x="4.5" y="18.5" width="11" height="11" transform="rotate(45 10 24)" rx="1.5"/>
+          <rect id="b1" x="36.5" y="18.5" width="11" height="11" transform="rotate(45 42 24)" rx="1.5"/>
+          <path d="M22 35h8v4l-4 4-4-4z" fill="#fff" opacity=".9"/>
+        </svg>
+        <div class="cnts">
+          <div class="cnt" id="cntB"><i>B</i><span class="dot b"></span><span class="dot b"></span><span class="dot b"></span></div>
+          <div class="cnt" id="cntS"><i>S</i><span class="dot s"></span><span class="dot s"></span></div>
+          <div class="cnt" id="cntO"><i>O</i><span class="dot o"></span><span class="dot o"></span></div>
+        </div>
+      </div>
+      <div id="runners">주자 없음</div>
       <div id="scoreLine">0</div>
     </div>
+    <div id="who" class="hudCard"><b id="whoName">Lv1 · 동네 야구왕</b><span id="whoDesc">일단 휘두르고 본다</span></div>
+  </div>
   </div>
 
   <div id="ticker"></div>
@@ -629,7 +639,7 @@ function show(el, on){ (typeof el==='string'?$(el):el).toggleAttribute('hidden',
 function updateHUD(){
   show('#hud', true);
   const solo = G.mode==='pitch' || G.mode==='bat';
-  ['#cntB','#cntS','#cntO','#bases'].forEach(s=>show(s, solo));
+  ['#soloBoard','#runners'].forEach(s=>show(s, solo));
   if(solo){
     const lv = LV[G.level], who = G.mode==='pitch' ? lv.bat : lv.pit;
     $('#whoName').textContent = `Lv${G.level+1} · ${who.name}`;
@@ -638,6 +648,7 @@ function updateHUD(){
     dots('#cntB',G.b); dots('#cntS',G.s); dots('#cntO',G.o);
     ['b1','b2','b3'].forEach((id,i)=>{ $('#'+id).setAttribute('fill', G.bases[i] ? '#ffd23f' : 'rgba(255,255,255,.25)'); });
     $('#scoreLine').textContent = G.mode==='pitch' ? `실점 ${G.runs} / 3` : `득점 ${G.runs} / ${lv.target}`;
+    $('#runners').textContent = runnerText(G.bases);
   } else if(RT && (G.mode==='rt-pitch' || G.mode==='rt-bat')){
     const me = RT.role==='host'?0:1;
     $('#whoName').textContent = `${RT.r}회${RT.half===0?'초':'말'} · 실시간 1:1`;
@@ -649,6 +660,12 @@ function updateHUD(){
     $('#whoDesc').textContent = G.mode==='link-bat' ? '친구가 던진 마구를 쳐라' : '친구에게 보낼 마구를 그려라';
     $('#scoreLine').textContent = `나 ${L.s[me]} - ${L.s[1-me]} 상대`;
   }
+}
+function runnerText(b){
+  const on = [1,2,3].filter((n,i)=>b[i]);
+  if(on.length===0) return '주자 없음';
+  if(on.length===3) return '만루';
+  return on.join('·') + '루';
 }
 function roundLabel(){ return L ? `${L.r}회${L.from==='A'?'초':'말'}` : ''; }
 
@@ -1396,7 +1413,7 @@ function checkHash(h){ h = typeof h==='string' ? h : (location.hash || ''); if(h
 checkHash(bootHash);
 window.addEventListener('hashchange', checkHash);
 requestAnimationFrame(frame);
-window.__G = {G, playerSwing, get F(){return F}, get H(){return H}, get L(){return L}, startSolo, throwPitch, genPitch, encodeLink, decodeLink, handleArrival, toScreen, get ball(){return ball}};
+window.__G = {G, playerSwing, updateHUD, get F(){return F}, get H(){return H}, get L(){return L}, startSolo, throwPitch, genPitch, encodeLink, decodeLink, handleArrival, toScreen, get ball(){return ball}};
 })();
 </script>
 
