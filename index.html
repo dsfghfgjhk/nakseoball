@@ -176,7 +176,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yellow);outline
       <div id="lvRow" role="group" aria-label="레벨 고르기"></div>
       <div id="lvInfo"></div>
       <h2>친구랑 하기</h2>
-      <button class="big green" id="goRt"><b>실시간 1:1</b><span>방 코드 4글자로 친구랑 동시에 접속해서 대결 · 3회, 공격마다 3구</span></button>
+      <button class="big green" id="goRt"><b>실시간 1:1</b><span>방 코드 4글자로 친구랑 동시에 접속 · 진짜 야구 규칙 3이닝</span></button>
       <button class="big blue" id="goLink"><b>링크 대전</b><span>동시에 접속 못 할 때: 던진 공을 링크로 주고받기 · 3회</span></button>
       <div class="codeRow">
         <input id="codeIn" placeholder="받은 링크나 코드 붙여넣기" autocomplete="off" spellcheck="false">
@@ -651,8 +651,13 @@ function updateHUD(){
     $('#runners').textContent = runnerText(G.bases);
   } else if(RT && (G.mode==='rt-pitch' || G.mode==='rt-bat')){
     const me = RT.role==='host'?0:1;
+    show('#soloBoard', true); show('#runners', true);
     $('#whoName').textContent = `${RT.r}회${RT.half===0?'초':'말'} · 실시간 1:1`;
-    $('#whoDesc').textContent = `${RT.k+1}/${RT_PPH}구 · ${G.mode==='rt-pitch' ? '네가 던질 차례' : '네가 칠 차례'}`;
+    $('#whoDesc').textContent = G.mode==='rt-pitch' ? '수비 · 네가 던질 차례' : '공격 · 네가 칠 차례';
+    const dots = (sel,n) => document.querySelectorAll(sel+' .dot').forEach((d,i)=>d.classList.toggle('on', i<n));
+    dots('#cntB',RT.B); dots('#cntS',RT.S); dots('#cntO',RT.O);
+    ['b1','b2','b3'].forEach((id,i)=>{ $('#'+id).setAttribute('fill', RT.bases[i] ? '#ffd23f' : 'rgba(255,255,255,.25)'); });
+    $('#runners').textContent = runnerText(RT.bases);
     $('#scoreLine').textContent = `나 ${RT.s[me]} - ${RT.s[1-me]} 상대`;
   } else if(L){
     const me = L.role==='A'?0:1;
@@ -977,10 +982,8 @@ function showFinal(canSend){
 
 
 /* ---------------- realtime 1:1 (PeerJS) ---------------- */
-const RT_PPH = 3;                        // pitches per half-inning
 const RT_PREFIX = 'nakseoball-v1-';
 const RT_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const RT_PTS = {hr:4, double:2, single:1, ball:1, hbp:1};
 let RT = null;
 function rtStatus(t){ $('#rtStatus').textContent = t; }
 function rtDestroy(){
@@ -1071,7 +1074,8 @@ function rtOnMsg(m){
 }
 function rtStart(){
   RT.started = true;
-  Object.assign(RT, {r:1, half:0, k:0, s:[0,0], pitch:null, pendingPitch:null, incoming:null, localDone:false, remote:null});
+  Object.assign(RT, {r:1, half:0, s:[0,0], B:0, S:0, O:0, bases:[0,0,0], halfRuns:0, pip:0, newHalf:true,
+    pitch:null, pendingPitch:null, incoming:null, localDone:false, remote:null});
   hideAllPanels();
   showBanner('연결됐어!', RT.role==='host' ? '네가 먼저 던져' : '친구가 먼저 던져', 1500, 'blue');
   later(1500, rtNext);
@@ -1081,25 +1085,47 @@ function rtRestart(send){
   hideAllPanels(); rtStart();
 }
 function rtIsPitcher(){ return (RT.half===0) === (RT.role==='host'); }
+// Same baseball rules on both phones: every play is applied in the same order on each side.
+function rtPlay(kind, label){
+  let big = label || KIND_TEXT[kind] || '', runs = 0;
+  const newPA = () => { RT.B = 0; RT.S = 0; RT.pip = 0; };
+  const out = () => { RT.O++; newPA(); };
+  const walk = () => { const b=RT.bases; if(b[0]){ if(b[1]){ if(b[2]) runs++; b[2]=1; } b[1]=1; } b[0]=1; newPA(); };
+  const adv = n => { const b=RT.bases; for(let i=2;i>=0;i--){ if(b[i]){ b[i]=0; if(i+n>=3) runs++; else b[i+n]=1; } } if(n>=4) runs++; else b[n-1]=1; newPA(); };
+  switch(kind){
+    case 'strike': case 'swstrike': RT.S++; if(RT.S>=3){ big='삼진 아웃!'; out(); } break;
+    case 'foul': if(RT.S<2) RT.S++; break;
+    case 'ball': RT.B++; big='볼'; if(RT.B>=4){ big='볼넷!'; walk(); } break;
+    case 'hbp': walk(); break;
+    case 'single': adv(1); break;
+    case 'double': adv(2); break;
+    case 'hr': adv(4); break;
+    case 'out': out(); break;
+  }
+  RT.halfRuns += runs;
+  return {big, runs};
+}
+function rtCountText(){ return `${RT.B}볼 ${RT.S}스트라이크 ${RT.O}아웃`; }
 function rtNext(){
   if(!RT) return;
   clearLater(); hideAllPanels();
   const half = `${RT.r}회${RT.half===0?'초':'말'}`;
+  const first = RT.newHalf; RT.newHalf = false;
   if(rtIsPitcher()){
     G.mode = 'rt-pitch'; G.batting = false;
     setBatter(OPP_BATTER); setPitcher(0x1f2a5a);
     updateHUD(); resetForPitch();
-    showBanner(`${half} · ${RT.k+1}구`, '네가 던질 차례!', 1300, 'blue');
+    if(first) showBanner(half, '수비! 네가 던질 차례', 1400, 'blue');
     G.state = 'wait';
-    later(700, ()=>{ G.state = 'pitchReady'; show('#pitchBar', true); });
+    later(first ? 900 : 300, ()=>{ G.state = 'pitchReady'; show('#pitchBar', true); });
   } else {
-    G.mode = 'rt-bat'; G.batting = true; G.pitchNo = RT.k;
+    G.mode = 'rt-bat'; G.batting = true; G.pitchNo = RT.pip;
     setBatter(MY_BATTER); setPitcher(0xd8322b);
     updateHUD(); resetForPitch();
-    showBanner(`${half} · ${RT.k+1}구`, '네가 칠 차례!', 1300, 'blue');
+    if(first) showBanner(half, '공격! 네가 칠 차례', 1400, 'blue');
     G.state = 'rtwait'; show('#batHint', true);
     $('#batHintText').innerHTML = '친구가 <b>마구를 그리는 중</b>…';
-    if(RT.pendingPitch) later(900, ()=>{ if(G.state==='rtwait' && RT && RT.pendingPitch) rtTakePitch(); });
+    if(RT.pendingPitch) later(first ? 900 : 300, ()=>{ if(G.state==='rtwait' && RT && RT.pendingPitch) rtTakePitch(); });
   }
 }
 function rtTakePitch(){
@@ -1110,14 +1136,15 @@ function rtTakePitch(){
 }
 function rtBatResult(kind, info){
   G.state = 'result';
-  const me = RT.role==='host'?0:1, pts = RT_PTS[kind]||0;
-  RT.s[me] += pts;
+  const me = RT.role==='host'?0:1;
   rtSend({t:'result', kind, D:info.D||0, label:info.label||'', hit: (H && H.hitParams) ? H.hitParams : null});
-  let big = info.label || KIND_TEXT[kind] || '';
-  if(kind==='ball') big = '볼! 골라냈다';
+  RT.pip++;
+  const res = rtPlay(kind, info.label);
+  RT.s[me] += res.runs;
   if(kind==='hr') sfx.cheer();
   updateHUD();
-  showBanner(big, pts ? `+${pts}점` : '0점', 1500, pts ? '' : 'blue');
+  let sub = res.runs ? `${res.runs}점 득점!` : (kind==='hr'||kind==='single'||kind==='double' ? `${info.D}m` : '');
+  showBanner(res.big, sub, 1500, res.runs || ['single','double','hr','hbp'].includes(kind) || res.big==='볼넷!' ? '' : 'blue');
   later(1700, rtAdvance);
 }
 function rtPitchResolve(kind){
@@ -1138,22 +1165,33 @@ function rtApplyIncoming(){
 }
 function rtShowRemote(m){
   G.state = 'result';
-  const opp = RT.role==='host'?1:0, pts = RT_PTS[m.kind]||0;
-  RT.s[opp] += pts;
-  let big = m.label || KIND_TEXT[m.kind] || '';
-  if(m.kind==='ball') big = '볼…';
-  const good = !pts && m.kind!=='foul';
-  if(m.kind==='swstrike' || m.kind==='strike') big = KIND_TEXT[m.kind];
+  const opp = RT.role==='host'?1:0;
+  RT.pip++;
+  const res = rtPlay(m.kind, m.label);
+  RT.s[opp] += res.runs;
+  const bad = res.runs || ['single','double','hr','hbp'].includes(m.kind) || res.big==='볼넷!';
   updateHUD();
   ticker.className = '';
-  showBanner(big, pts ? `친구 +${pts}점` : '막았다!', 1500, good ? 'blue' : 'red');
+  showBanner(res.big, res.runs ? `${res.runs}점 줬다…` : '', 1500, bad ? 'red' : 'blue');
   later(1700, rtAdvance);
 }
+const RT_MERCY = 5;   // a half-inning also ends after 5 runs so nobody waits forever
 function rtAdvance(){
   if(!RT) return;
-  RT.k++;
-  if(RT.k >= RT_PPH){ RT.k = 0; if(RT.half===0) RT.half = 1; else { RT.half = 0; RT.r++; } }
-  if(RT.r > ROUNDS) return rtFinal();
+  const host = RT.s[0], guest = RT.s[1], last = RT.r === ROUNDS;
+  if(last && RT.half===1 && host > guest) return rtFinal();          // walk-off
+  if(RT.O >= 3 || RT.halfRuns >= RT_MERCY){
+    const mercy = RT.O < 3;
+    Object.assign(RT, {B:0, S:0, O:0, bases:[0,0,0], halfRuns:0, pip:0, newHalf:true});
+    if(RT.half===0){
+      if(last && host > guest) return rtFinal();                       // home team already ahead
+      RT.half = 1;
+    } else { RT.half = 0; RT.r++; }
+    if(RT.r > ROUNDS) return rtFinal();
+    showBanner(mercy ? '5점 제한!' : '3아웃!', '공수 교대', 1300, 'blue');
+    later(1400, rtNext);
+    return;
+  }
   rtNext();
 }
 function rtFinal(){
@@ -1413,7 +1451,7 @@ function checkHash(h){ h = typeof h==='string' ? h : (location.hash || ''); if(h
 checkHash(bootHash);
 window.addEventListener('hashchange', checkHash);
 requestAnimationFrame(frame);
-window.__G = {G, playerSwing, updateHUD, get F(){return F}, get H(){return H}, get L(){return L}, startSolo, throwPitch, genPitch, encodeLink, decodeLink, handleArrival, toScreen, get ball(){return ball}};
+window.__G = {G, playerSwing, updateHUD, get RT(){return RT}, get F(){return F}, get H(){return H}, get L(){return L}, startSolo, throwPitch, genPitch, encodeLink, decodeLink, handleArrival, toScreen, get ball(){return ball}};
 })();
 </script>
 
