@@ -116,6 +116,10 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yellow);outline
 .btn.ghost{background:#eef1f8;color:var(--ink);box-shadow:none}
 .toast{font-size:12px;font-weight:800;color:var(--blue);min-height:16px}
 
+#rtPanel .codeBig{font-family:var(--display);font-size:clamp(44px,18cqw,64px);letter-spacing:.12em;color:var(--ink);line-height:1;-webkit-user-select:text;user-select:text}
+#rtPanel input{border:2px solid var(--line);border-radius:10px;padding:10px;font:400 26px var(--display);letter-spacing:.15em;text-align:center;text-transform:uppercase;width:100%;color:var(--ink);background:#fff;-webkit-user-select:text;user-select:text}
+#rtStatus{min-height:20px}
+.big.green{background:#1f9d63}
 #arrive{position:absolute;inset:0;background:var(--night);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px 16px;text-align:center}
 #arrive .k{font-family:var(--display);font-size:22px;line-height:1.2}
 #arrive .k em{font-style:normal;color:var(--red);display:block;font-size:28px}
@@ -158,7 +162,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yellow);outline
       <button class="chip" data-b="2" aria-pressed="false"><span class="bd" style="width:8px;height:8px;border-width:1.5px"></span>콩알공</button>
     </div>
   </div>
-  <div id="batHint" hidden><span>날아오는 공을 <b>타이밍 맞춰 터치</b>해서 쳐!</span></div>
+  <div id="batHint" hidden><span id="batHintText">날아오는 공을 <b>타이밍 맞춰 터치</b>해서 쳐!</span></div>
 
   <div id="title">
     <div id="logo"><h1>낙서<em>볼</em></h1><p>그린 대로 날아가는 야구</p></div>
@@ -171,7 +175,8 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yellow);outline
       <div id="lvRow" role="group" aria-label="레벨 고르기"></div>
       <div id="lvInfo"></div>
       <h2>친구랑 하기</h2>
-      <button class="big blue" id="goLink"><b>링크 대전</b><span>내가 던진 공을 링크로 보내고, 친구가 치고 다시 던져 보내는 방식 · 3회</span></button>
+      <button class="big green" id="goRt"><b>실시간 1:1</b><span>방 코드 4글자로 친구랑 동시에 접속해서 대결 · 3회, 공격마다 3구</span></button>
+      <button class="big blue" id="goLink"><b>링크 대전</b><span>동시에 접속 못 할 때: 던진 공을 링크로 주고받기 · 3회</span></button>
       <div class="codeRow">
         <input id="codeIn" placeholder="받은 링크나 코드 붙여넣기" autocomplete="off" spellcheck="false">
         <button class="small" id="codeGo">열기</button>
@@ -205,6 +210,24 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yellow);outline
     </div>
   </div>
 
+  <div id="rtPanel" class="scrim" hidden>
+    <div class="card">
+      <div class="eyebrow">실시간 1:1</div>
+      <div id="rtHostBox" hidden>
+        <p>이 코드를 친구한테 알려줘</p>
+        <div class="codeBig" id="rtCode">----</div>
+      </div>
+      <div id="rtMenu" style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn red" id="rtHost">방 만들기</button>
+        <p>또는 친구가 만든 방 코드 넣기</p>
+        <input id="rtIn" maxlength="4" placeholder="AB12" autocomplete="off" spellcheck="false" aria-label="방 코드">
+        <button class="btn blue" id="rtJoin">들어가기</button>
+      </div>
+      <p id="rtStatus" aria-live="polite"></p>
+      <button class="btn ghost" id="rtCancel">취소</button>
+    </div>
+  </div>
+
   <div id="arrive" hidden>
     <div class="k">낙서볼<em>링크 대전</em></div>
     <div class="msg" id="aMsg">대전이 도착했어!</div>
@@ -215,6 +238,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yellow);outline
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
 (function(){
 'use strict';
@@ -609,7 +633,7 @@ function showBanner(text, sub, ms, tone){
 }
 function hideBanner(){ clearTimeout(bannerTimer); banner.className=''; bannerSub.className=''; }
 function showTicker(text, ms){ ticker.textContent = text; ticker.className='show'; clearTimeout(tickerTimer); tickerTimer = setTimeout(()=>ticker.className='', ms||1800); }
-function show(el, on){ (typeof el==='string'?$(el):el).hidden = !on; }
+function show(el, on){ (typeof el==='string'?$(el):el).toggleAttribute('hidden', !on); }
 
 function updateHUD(){
   show('#hud', true);
@@ -623,6 +647,11 @@ function updateHUD(){
     dots('#cntB',G.b); dots('#cntS',G.s); dots('#cntO',G.o);
     ['b1','b2','b3'].forEach((id,i)=>{ $('#'+id).setAttribute('fill', G.bases[i] ? '#ffd23f' : 'rgba(255,255,255,.25)'); });
     $('#scoreLine').textContent = G.mode==='pitch' ? `실점 ${G.runs} / 3` : `득점 ${G.runs} / ${lv.target}`;
+  } else if(RT && (G.mode==='rt-pitch' || G.mode==='rt-bat')){
+    const me = RT.role==='host'?0:1;
+    $('#whoName').textContent = `${RT.r}회${RT.half===0?'초':'말'} · 실시간 1:1`;
+    $('#whoDesc').textContent = `${RT.k+1}/${RT_PPH}구 · ${G.mode==='rt-pitch' ? '네가 던질 차례' : '네가 칠 차례'}`;
+    $('#scoreLine').textContent = `나 ${RT.s[me]} - ${RT.s[1-me]} 상대`;
   } else if(L){
     const me = L.role==='A'?0:1;
     $('#whoName').textContent = `${roundLabel()} · 링크 대전`;
@@ -633,9 +662,10 @@ function updateHUD(){
 function roundLabel(){ return L ? `${L.r}회${L.from==='A'?'초':'말'}` : ''; }
 
 /* ---------------- flow ---------------- */
-function hideAllPanels(){ ['#title','#modal','#share','#arrive','#pitchBar','#batHint'].forEach(s=>show(s,false)); }
+function hideAllPanels(){ ['#title','#modal','#share','#arrive','#pitchBar','#batHint','#rtPanel'].forEach(s=>show(s,false)); }
 function toTitle(){
   clearLater(); hideBanner(); hideAllPanels(); show('#hud', false); show('#title', true);
+  rtDestroy();
   G.state='title'; G.mode=null; F=null; H=null; L=null; stroke=[]; strokeAlpha=0; ring=null;
   ball.visible=false; trail.count=0;
   setBatter(LV[G.level].bat); setPitcher(LV[G.level].pit.cap); poseBatter(0);
@@ -658,7 +688,7 @@ function startSolo(mode, l){
 function nextPitch(delay){
   resetForPitch();
   if(G.batting){
-    G.state = 'wait'; show('#batHint', true);
+    G.state = 'wait'; show('#batHint', true); $('#batHintText').innerHTML = '날아오는 공을 <b>타이밍 맞춰 터치</b>해서 쳐!';
     later(delay||700, cpuWindup);
   } else {
     G.state = 'pitchReady'; show('#pitchBar', true);
@@ -679,6 +709,7 @@ function cpuWindup(){
   later(480, ()=>{
     let p;
     if(G.mode==='link-bat') p = L.pitch;
+    else if(G.mode==='rt-bat') p = RT.pitch;
     else p = genPitch(G.level);
     throwPitch(p);
   });
@@ -767,7 +798,7 @@ function startHit(start, h){
   if(res.kind==='foul') D = Math.min(D, 60);
   const Lpt = new THREE.Vector3(start.x + Math.sin(th)*D, 0, start.z + Math.cos(th)*D);
   const apex = ground ? 0.4 : Math.max(0.8, D*Math.tan(clamp(h.phi,5,75)*Math.PI/180)/4);
-  H = {start, L:Lpt, apex, ground, tf: ground ? clamp(D/28, 0.9, 2) : clamp(0.9 + D/48, 1.1, 3.2), t:0, dotT:0, res, D:Math.round(h.D), done:false};
+  H = {hitParams:{theta:h.theta, phi:h.phi, q:h.q, D:h.D}, start, L:Lpt, apex, ground, tf: ground ? clamp(D/28, 0.9, 2) : clamp(0.9 + D/48, 1.1, 3.2), t:0, dotT:0, res, D:Math.round(h.D), done:false};
   trail.count = 0;
   later(120, ()=>{ setView('hit'); camLook.copy(start); });
 }
@@ -778,6 +809,8 @@ function resolve(kind, info){
   if(G.mode==='pitch' || G.mode==='bat') soloResult(kind, info);
   else if(G.mode==='link-bat') linkBatResult(kind, info);
   else if(G.mode==='link-pitch') linkPitchResult(kind, info);
+  else if(G.mode==='rt-bat') rtBatResult(kind, info);
+  else if(G.mode==='rt-pitch') rtPitchResolve(kind, info);
 }
 
 const KIND_TEXT = {strike:'스트라이크!', swstrike:'헛스윙!', ball:'볼', foul:'파울', hbp:'몸에 맞는 공!', single:'안타!', double:'2루타!', hr:'홈런!'};
@@ -934,6 +967,201 @@ function showFinal(canSend){
   show('#modal', true);
 }
 
+
+/* ---------------- realtime 1:1 (PeerJS) ---------------- */
+const RT_PPH = 3;                        // pitches per half-inning
+const RT_PREFIX = 'nakseoball-v1-';
+const RT_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const RT_PTS = {hr:4, double:2, single:1, ball:1, hbp:1};
+let RT = null;
+function rtStatus(t){ $('#rtStatus').textContent = t; }
+function rtDestroy(){
+  if(!RT) return;
+  const r = RT; RT = null;
+  try{ r.conn && r.conn.close(); }catch(e){}
+  try{ r.peer && r.peer.destroy(); }catch(e){}
+}
+function rtOpenPanel(){
+  if(typeof Peer === 'undefined'){ showBanner('연결 기능을 못 불러왔어', '인터넷 연결을 확인해 줘', 2000, 'red'); return; }
+  clearLater(); hideAllPanels(); rtDestroy();
+  show('#rtPanel', true); show('#rtHostBox', false); $('#rtMenu').style.display = 'flex';
+  $('#rtIn').value = ''; rtStatus('');
+}
+function rtMakeCode(){ let c=''; for(let i=0;i<4;i++) c += RT_CHARS[Math.floor(Math.random()*RT_CHARS.length)]; return c; }
+function rtHost(tries){
+  tries = tries||0;
+  rtDestroy();
+  const code = rtMakeCode();
+  RT = {role:'host', code, peer:new Peer(RT_PREFIX+code.toLowerCase(), {debug:0}), conn:null};
+  const me = RT;
+  $('#rtMenu').style.display = 'none'; show('#rtHostBox', true); $('#rtCode').textContent = '····';
+  rtStatus('방 만드는 중…');
+  me.peer.on('open', ()=>{ if(RT!==me) return; $('#rtCode').textContent = code; rtStatus('친구가 들어오길 기다리는 중…'); });
+  me.peer.on('connection', c=>{
+    if(RT!==me || me.conn){ try{ c.close(); }catch(e){} return; }
+    me.conn = c; rtWire(c);
+    c.on('open', ()=>{ if(RT!==me) return; rtSend({t:'start'}); rtStart(); });
+  });
+  me.peer.on('error', err=>{
+    if(RT!==me) return;
+    if(err.type==='unavailable-id' && tries<4) return rtHost(tries+1);
+    rtFail(err);
+  });
+}
+function rtJoin(){
+  const code = ($('#rtIn').value||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(code.length!==4){ rtStatus('코드 4글자를 넣어 줘'); return; }
+  rtDestroy();
+  RT = {role:'guest', code, peer:new Peer({debug:0}), conn:null};
+  const me = RT;
+  rtStatus('연결하는 중…');
+  me.peer.on('open', ()=>{
+    if(RT!==me) return;
+    const c = me.peer.connect(RT_PREFIX+code.toLowerCase(), {reliable:true, serialization:'json'});
+    me.conn = c; rtWire(c);
+    setTimeout(()=>{ if(RT===me && !me.started) { rtStatus('연결이 안 돼. 코드를 확인하거나, 같은 와이파이/데이터를 바꿔서 다시 해 봐'); } }, 9000);
+  });
+  me.peer.on('error', err=>{ if(RT!==me) return; rtFail(err); });
+}
+function rtFail(err){
+  const t = err && err.type;
+  const msg = t==='peer-unavailable' ? '그런 방이 없어. 코드를 다시 확인해 줘'
+    : (t==='network' || t==='server-error' || t==='socket-error' || t==='socket-closed') ? '연결 서버에 못 붙었어. 잠시 후 다시 해 봐'
+    : t==='browser-incompatible' ? '이 브라우저는 실시간 대전을 못 해. 크롬이나 사파리로 열어 줘'
+    : '연결에 실패했어. 다시 해 봐';
+  if(G.mode==='rt-pitch' || G.mode==='rt-bat'){ rtLost(); return; }
+  rtDestroy(); show('#rtPanel', true); show('#rtHostBox', false); $('#rtMenu').style.display='flex'; rtStatus(msg);
+}
+function rtWire(c){
+  const me = RT;
+  c.on('data', m=>{ if(RT===me) rtOnMsg(m); });
+  c.on('close', ()=>{ if(RT===me) rtLost(); });
+  c.on('error', ()=>{ if(RT===me) rtLost(); });
+}
+function rtSend(m){ try{ RT && RT.conn && RT.conn.open && RT.conn.send(m); }catch(e){} }
+function rtLost(){
+  if(!RT) return;
+  rtDestroy();
+  if(G.state==='title') return;
+  clearLater();
+  showBanner('상대 연결이 끊겼어', '처음 화면으로 돌아갈게', 2200, 'red');
+  later(2300, toTitle);
+}
+function rtOnMsg(m){
+  if(!m || typeof m!=='object') return;
+  if(m.t==='start'){ if(!RT.started) rtStart(); }
+  else if(m.t==='pitch'){
+    const p = m.p; if(!p || !Array.isArray(p.xy)) return;
+    RT.pendingPitch = {n:p.n, xy:Float32Array.from(p.xy), T:clamp(+p.T||1,0.3,3), turn:+p.turn||0, ball:clamp(p.ball|0,0,2)};
+    if(G.mode==='rt-bat' && G.state==='rtwait') rtTakePitch();
+  }
+  else if(m.t==='result'){
+    RT.incoming = m;
+    if(RT.localDone) rtApplyIncoming();
+  }
+  else if(m.t==='rematch'){ if(G.state==='final') rtRestart(false); }
+}
+function rtStart(){
+  RT.started = true;
+  Object.assign(RT, {r:1, half:0, k:0, s:[0,0], pitch:null, pendingPitch:null, incoming:null, localDone:false, remote:null});
+  hideAllPanels();
+  showBanner('연결됐어!', RT.role==='host' ? '네가 먼저 던져' : '친구가 먼저 던져', 1500, 'blue');
+  later(1500, rtNext);
+}
+function rtRestart(send){
+  if(send) rtSend({t:'rematch'});
+  hideAllPanels(); rtStart();
+}
+function rtIsPitcher(){ return (RT.half===0) === (RT.role==='host'); }
+function rtNext(){
+  if(!RT) return;
+  clearLater(); hideAllPanels();
+  const half = `${RT.r}회${RT.half===0?'초':'말'}`;
+  if(rtIsPitcher()){
+    G.mode = 'rt-pitch'; G.batting = false;
+    setBatter(OPP_BATTER); setPitcher(0x1f2a5a);
+    updateHUD(); resetForPitch();
+    showBanner(`${half} · ${RT.k+1}구`, '네가 던질 차례!', 1300, 'blue');
+    G.state = 'wait';
+    later(700, ()=>{ G.state = 'pitchReady'; show('#pitchBar', true); });
+  } else {
+    G.mode = 'rt-bat'; G.batting = true; G.pitchNo = RT.k;
+    setBatter(MY_BATTER); setPitcher(0xd8322b);
+    updateHUD(); resetForPitch();
+    showBanner(`${half} · ${RT.k+1}구`, '네가 칠 차례!', 1300, 'blue');
+    G.state = 'rtwait'; show('#batHint', true);
+    $('#batHintText').innerHTML = '친구가 <b>마구를 그리는 중</b>…';
+    if(RT.pendingPitch) later(900, ()=>{ if(G.state==='rtwait' && RT && RT.pendingPitch) rtTakePitch(); });
+  }
+}
+function rtTakePitch(){
+  RT.pitch = RT.pendingPitch; RT.pendingPitch = null;
+  $('#batHintText').innerHTML = '날아오는 공을 <b>타이밍 맞춰 터치</b>해서 쳐!';
+  G.state = 'wait';
+  later(250, cpuWindup);
+}
+function rtBatResult(kind, info){
+  G.state = 'result';
+  const me = RT.role==='host'?0:1, pts = RT_PTS[kind]||0;
+  RT.s[me] += pts;
+  rtSend({t:'result', kind, D:info.D||0, label:info.label||'', hit: (H && H.hitParams) ? H.hitParams : null});
+  let big = info.label || KIND_TEXT[kind] || '';
+  if(kind==='ball') big = '볼! 골라냈다';
+  if(kind==='hr') sfx.cheer();
+  updateHUD();
+  showBanner(big, pts ? `+${pts}점` : '0점', 1500, pts ? '' : 'blue');
+  later(1700, rtAdvance);
+}
+function rtPitchResolve(kind){
+  if(RT && RT.remote){ const m = RT.remote; RT.remote = null; rtShowRemote(m); return; }
+  RT.localDone = true;
+  if(RT.incoming) rtApplyIncoming();
+  else { G.state = 'rtwaitres'; showTicker('친구가 치는 중…', 15000); }
+}
+function rtApplyIncoming(){
+  const m = RT.incoming; RT.incoming = null; RT.localDone = false;
+  if(m.hit && ['single','double','hr','foul','out'].includes(m.kind) && F){
+    RT.remote = m;
+    ball.visible = true; ball.scale.setScalar(F.br);
+    F.done = false;
+    startHit(new THREE.Vector3(0, 0.85, 0.3), m.hit);
+    F.done = true;
+  } else rtShowRemote(m);
+}
+function rtShowRemote(m){
+  G.state = 'result';
+  const opp = RT.role==='host'?1:0, pts = RT_PTS[m.kind]||0;
+  RT.s[opp] += pts;
+  let big = m.label || KIND_TEXT[m.kind] || '';
+  if(m.kind==='ball') big = '볼…';
+  const good = !pts && m.kind!=='foul';
+  if(m.kind==='swstrike' || m.kind==='strike') big = KIND_TEXT[m.kind];
+  updateHUD();
+  ticker.className = '';
+  showBanner(big, pts ? `친구 +${pts}점` : '막았다!', 1500, good ? 'blue' : 'red');
+  later(1700, rtAdvance);
+}
+function rtAdvance(){
+  if(!RT) return;
+  RT.k++;
+  if(RT.k >= RT_PPH){ RT.k = 0; if(RT.half===0) RT.half = 1; else { RT.half = 0; RT.r++; } }
+  if(RT.r > ROUNDS) return rtFinal();
+  rtNext();
+}
+function rtFinal(){
+  G.state = 'final'; show('#hud', false); show('#batHint', false); show('#pitchBar', false);
+  const me = RT.role==='host'?0:1, a = RT.s[me], b = RT.s[1-me];
+  $('#mEye').textContent = `실시간 1:1 · ${ROUNDS}회 종료`;
+  $('#mTitle').textContent = a>b ? '승리!' : a<b ? '패배…' : '무승부';
+  $('#mText').innerHTML = `<b style="font-size:22px">나 ${a} - ${b} 상대</b>`;
+  if(a>b) sfx.cheer();
+  const btns = $('#mBtns'); btns.innerHTML = '';
+  const mk = (txt, cls, fn) => { const x=document.createElement('button'); x.className='btn '+cls; x.textContent=txt; x.onclick=fn; btns.appendChild(x); };
+  mk('한 판 더', 'red', ()=>{ if(RT) rtRestart(true); else toTitle(); });
+  mk('처음으로', 'ghost', toTitle);
+  show('#modal', true);
+}
+
 /* ---------------- drawing (pitch) ---------------- */
 function pt(e){ const r = ov.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top, t:performance.now()}; }
 ov.addEventListener('pointerdown', e=>{
@@ -943,7 +1171,7 @@ ov.addEventListener('pointerdown', e=>{
     drawing = true; stroke = [p]; strokeT0 = p.t; strokeAlpha = 1;
     try{ ov.setPointerCapture(e.pointerId); }catch(_){}
     show('#pitchBar', false);
-  } else if(G.batting && (G.state==='flight' || G.state==='windup' || G.state==='wait')){
+  } else if(G.batting && (G.state==='flight' || G.state==='windup' || G.state==='wait' || G.state==='rtwait')){
     ring = p;
     if(G.state==='flight') playerSwing(p);
   }
@@ -975,6 +1203,7 @@ function finishStroke(){
   }
   let p = {n, xy, T:clamp(0.4 + dur*0.28, 0.5, 1.6), turn, ball:G.ballType};
   if(G.mode==='link-pitch'){ p = quantize(p); L.myPitch = p; }
+  if(G.mode==='rt-pitch'){ p = quantize(p); rtSend({t:'pitch', p:{n:p.n, xy:Array.from(p.xy), T:p.T, turn:Math.round(p.turn), ball:p.ball}}); RT.localDone = false; RT.incoming = null; }
   throwPitch(p);
 }
 
@@ -1140,6 +1369,11 @@ function renderLevels(){
 $('#goPitch').onclick = () => { audioInit(); startSolo('pitch', G.level); };
 $('#goBat').onclick = () => { audioInit(); startSolo('bat', G.level); };
 $('#goLink').onclick = () => { audioInit(); startLinkNew(); };
+$('#goRt').onclick = () => { audioInit(); rtOpenPanel(); };
+$('#rtHost').onclick = () => rtHost();
+$('#rtJoin').onclick = () => { audioInit(); rtJoin(); };
+$('#rtIn').addEventListener('keydown', e=>{ if(e.key==='Enter') $('#rtJoin').click(); });
+$('#rtCancel').onclick = toTitle;
 $('#codeGo').onclick = () => {
   audioInit();
   const code = extractCode($('#codeIn').value);
